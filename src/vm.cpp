@@ -54,8 +54,9 @@ Vm::Vm() : _classloader(std::make_unique<ClassLoader>()), _jnienv(std::make_uniq
 	ClassBuilder(*_classloader, "", "double").finalize();
 	ClassBuilder(*_classloader, "", "void").finalize();
 
-	// load self as a shared library to be able to resolve native methods
+	logger.info("Loading self as shared library...");
 	loadLibrary("");
+	logger.info("Self loaded as shared library.");
 }
 
 Vm::~Vm() {
@@ -64,7 +65,9 @@ Vm::~Vm() {
 }
 
 void Vm::loadRt(const std::string& path) {
+	logger.info("Loading runtime library...");
 	_classloader->loadRt(path);
+	logger.info("Runtime library loaded.");
 	if (!_isPrimitiveClassInitialized) {
 		_isPrimitiveClassInitialized = true;
 		/*
@@ -98,7 +101,9 @@ void Vm::loadRt(const std::string& path) {
 }
 
 void Vm::loadDex(const std::string& path) {
+	logger.info("Loading DEX: {}", path.c_str());
 	_classloader->loadDex(path);
+	logger.info("DEX loaded: {}", path.c_str());
 }
 
 void Vm::loadApk(const std::string& path) {

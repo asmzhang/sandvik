@@ -27,11 +27,7 @@
 #include "system/logger.hpp"
 #include "system/zip.hpp"
 
-extern "C" {
-	extern const unsigned char _binary_sanddirt_dex_jar_start[];
-	extern const unsigned char _binary_sanddirt_dex_jar_end[];
-	extern const size_t _binary_sanddirt_dex_jar_size;
-}
+#include "resource_paths.h"
 
 using namespace sandvik;
 
@@ -39,13 +35,12 @@ using namespace sandvik;
 void rtld::load(const std::string& path_, std::vector<std::unique_ptr<Dex>>& dexs_) {
 	auto zip = std::make_unique<ZipReader>();
 	if (path_.empty()) {
-		auto size = (size_t)&_binary_sanddirt_dex_jar_size;
-		// paranoia check
-		auto size2 = (uintptr_t)_binary_sanddirt_dex_jar_end - (uintptr_t)_binary_sanddirt_dex_jar_start;
-		if (size != size2) {
-			throw VmException("Internal error: embedded RT size mismatch {} != {}", size, size2);
+		// 使用直接配置的资源路径，而不是嵌入式资源
+		std::string resource_path = get_sanddirt_dex_jar_path();
+		if (!ZipReader::isValidArchive(resource_path)) {
+			throw VmException("Invalid internal RT file: {}", resource_path);
 		}
-		zip->open((const uint8_t*)_binary_sanddirt_dex_jar_start, size);
+		zip->open(resource_path);
 	} else {
 		if (!ZipReader::isValidArchive(path_)) {
 			throw VmException("Invalid RT file: {}", path_);

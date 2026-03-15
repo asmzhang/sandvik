@@ -6,3 +6,4 @@ ext
 **/*.pyc
 __pycache__
 **/*.class
+**/build

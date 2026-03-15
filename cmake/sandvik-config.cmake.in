@@ -1,0 +1,113 @@
+#=============================================================================
+# Sandvik CMake配置文件
+# 用于其他项目使用find_package(sandvik)
+#=============================================================================
+
+@PACKAGE_INIT@
+
+# 检查依赖
+include(CMakeFindDependencyMacro)
+
+# 查找依赖库
+find_dependency(fmt REQUIRED)
+find_dependency(Threads REQUIRED)
+
+# 导入目标
+include("${CMAKE_CURRENT_LIST_DIR}/sandvik-targets.cmake")
+
+# 版本检查
+set(SANDVIK_VERSION @PROJECT_VERSION@)
+
+# 提供变量
+set(SANDVIK_FOUND TRUE)
+set(SANDVIK_INCLUDE_DIRS "@PACKAGE_INCLUDE_INSTALL_DIR@")
+set(SANDVIK_LIBRARIES sandvik::sandvik)
+set(SANDVIK_EXECUTABLE sandvik::sandvik-vm)
+
+# 提供函数
+function(sandvik_add_executable target)
+    add_executable(${target} ${ARGN})
+    target_link_libraries(${target} PRIVATE sandvik::sandvik)
+    
+    # 设置包含目录
+    target_include_directories(${target}
+        PRIVATE
+            ${SANDVIK_INCLUDE_DIRS}
+    )
+    
+    # 设置C++标准
+    set_target_properties(${target} PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+    )
+endfunction()
+
+function(sandvik_add_library target)
+    add_library(${target} ${ARGN})
+    target_link_libraries(${target} PRIVATE sandvik::sandvik)
+    
+    # 设置包含目录
+    target_include_directories(${target}
+        PRIVATE
+            ${SANDVIK_INCLUDE_DIRS}
+    )
+    
+    # 设置C++标准
+    set_target_properties(${target} PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+    )
+endfunction()
+
+# 提供宏
+macro(sandvik_check_version version)
+    if(${PROJECT_VERSION} VERSION_LESS ${version})
+        message(FATAL_ERROR
+            "Sandvik version ${PROJECT_VERSION} is too old. "
+            "Required version: ${version}"
+        )
+    endif()
+endmacro()
+
+# 平台检测
+macro(sandvik_detect_platform)
+    if(WIN32)
+        set(SANDVIK_PLATFORM "Windows")
+    elseif(APPLE)
+        set(SANDVIK_PLATFORM "macOS")
+    elseif(ANDROID)
+        set(SANDVIK_PLATFORM "Android")
+    else()
+        set(SANDVIK_PLATFORM "Linux")
+    endif()
+endmacro()
+
+# 消息输出
+function(sandvik_message msg)
+    message(STATUS "[Sandvik] ${msg}")
+endfunction()
+
+# 验证安装
+function(sandvik_verify_installation)
+    sandvik_message("Sandvik ${SANDVIK_VERSION} installed successfully")
+    sandvik_message("Platform: ${SANDVIK_PLATFORM}")
+    sandvik_message("Include directory: ${SANDVIK_INCLUDE_DIRS}")
+    
+    # 检查库文件
+    if(TARGET sandvik::sandvik)
+        get_target_property(lib_type sandvik::sandvik TYPE)
+        sandvik_message("Library type: ${lib_type}")
+    endif()
+    
+    if(TARGET sandvik::sandvik-vm)
+        sandvik_message("Executable target available: sandvik::sandvik-vm")
+    endif()
+endfunction()
+
+# 自动检测平台
+sandvik_detect_platform()
+
+# 输出信息
+sandvik_message("Sandvik ${SANDVIK_VERSION} configured for ${SANDVIK_PLATFORM}")

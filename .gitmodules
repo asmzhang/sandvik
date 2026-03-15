@@ -2,11 +2,12 @@
 	path = ext/fmt
 	url = https://github.com/fmtlib/fmt
 [submodule "ext/libffi"]
-	path = ext/libffi
-	url = https://github.com/libffi/libffi.git
+    path = ext/libffi
+    url = https://github.com/asmzhang/libffi.git
+    branch = my
 [submodule "ext/LIEF"]
 	path = ext/LIEF
-	url = https://github.com/yag00/LIEF.git
+	url = https://github.com/asmzhang/LIEF.git
 [submodule "ext/args"]
 	path = ext/args
 	url = https://github.com/Taywee/args.git

@@ -1,0 +1,219 @@
+[38;2;255;255;255m[0m[38;2;255;255;255m[*] Loading runtime library...[0m[38;2;255;255;255m
+[0m[38;2;255;255;255m[0m[38;2;255;255;255m[*] Runtime library loaded.[0m[38;2;255;255;255m
+[0m[38;2;255;255;255m[0m[38;2;255;255;255m[*] Loading DEX: {}[0m[38;2;255;255;255m
+[0m[38;2;255;255;255m[0m[38;2;255;255;255m[*] DEX loaded: {}[0m[38;2;255;255;255m
+[0m[38;2;255;255;255m[0m[38;2;255;255;255m[*] Running class: DalvikTest[0m[38;2;255;255;255m
+[0mRunning Dalvik tests...
+Running branching tests...
+[OK] Positive branch
+[OK] Positive branch
+[OK] Positive branch
+[OK] Zero branch
+[OK] Negative branch
+[OK] Negative branch
+[OK] Negative branch
+[OK] Float compare
+[OK] Float compare
+[OK] Double compare
+[OK] Double compare
+Running arithmetic tests...
+[OK] Integer arithmetic
+[OK] Long arithmetic
+[OK] Float arithmetic
+[OK] Double arithmetic
+[OK] Integer Literal8 arithmetic
+[OK] Integer Literal16 arithmetic
+[OK] Integer add
+[OK] Integer sub
+[OK] Integer mul
+[OK] Integer div
+[OK] Integer rem
+[OK] Integer and
+[OK] Integer or
+[OK] Integer xor
+[OK] Integer shl
+[OK] Integer shr
+[OK] Integer ushr
+[OK] Long add
+[OK] Long sub
+[OK] Long mul
+[OK] Long div
+[OK] Long rem
+[OK] Long and
+[OK] Long or
+[OK] Long xor
+[OK] Long shl
+[OK] Long shr
+[OK] Long ushr
+[OK] Float add
+[OK] Float sub
+[OK] Float mul
+[OK] Float div
+[OK] Float rem
+[OK] Double add
+[OK] Double sub
+[OK] Double mul
+[OK] Double div
+[OK] Double rem
+Running logical tests...
+[OK] Integer logical
+[OK] Long logical
+[OK] Negation test
+[OK] Not test
+[OK] and integer test
+[OK] or integer test
+[OK] xor integer test
+[OK] shift left integer test
+[OK] shift right integer test
+[OK] unsigned shift right integer test
+[OK] and long test
+[OK] or long test
+[OK] xor long test
+[OK] shift left long test
+[OK] shift right long test
+[OK] unsigned shift right long test
+Running cast operation tests...
+[OK] cast int-to-long
+[OK] cast int-to-long
+[OK] cast int-to-float
+[OK] cast int-to-float
+[OK] cast int-to-double
+[OK] cast int-to-double
+[OK] cast long-to-int
+[OK] cast long-to-int
+[OK] cast long-to-float
+[OK] cast long-to-float
+[OK] cast long-to-double
+[OK] cast long-to-double
+[OK] cast float-to-int
+[OK] cast float-to-int
+[OK] cast float-to-long
+[OK] cast float-to-long
+[OK] cast double-to-int
+[OK] cast double-to-int
+[OK] cast double-to-long
+[OK] cast double-to-long
+[OK] cast double-to-float
+[OK] cast double-to-float
+[OK] cast int-to-byte
+[OK] cast int-to-byte
+[OK] cast int-to-char
+[OK] cast int-to-short
+[OK] cast int-to-short
+[OK] cast object-to-string
+Running switch tests...
+[OK] Switch test
+Running field and static operation tests...
+[OK] iget-int
+[OK] iget-wide
+[OK] iget-boolean
+[OK] iget-byte
+[OK] iget-char
+[OK] iget-short
+[OK] iget-object
+[OK] sget-int
+[OK] sget-wide
+[OK] sget-boolean
+[OK] sget-byte
+[OK] sget-char
+[OK] sget-short
+[OK] sget-object
+[OK] object-ref-parameter
+[OK] object-ref-parameter
+[OK] object-ref-parameter
+[OK] object-ref-parameter
+[OK] object-ref-parameter
+[OK] object-ref-parameter
+[OK] object-ref-return
+[OK] object-ref-return
+[OK] object-ref-return
+[OK] object-ref-return
+[OK] object-ref-return
+[OK] object-ref-return
+[OK] object-equality
+[OK] object-inequality
+Running string operation tests...
+[OK] string ops
+[OK] const-class
+[OK] instance-of
+Running array operation tests...
+[OK] string array
+[OK] array ops
+[OK] char array element 0
+[OK] char array element 1
+[OK] char array element 2
+[OK] char array element 3
+[OK] char array element 4
+[OK] char array element 5
+[OK] char array element 6
+[OK] char array element 7
+[OK] char array element 8
+[OK] char array element 9
+[OK] short array element 0
+[OK] short array element 1
+[OK] short array element 2
+[OK] short array element 3
+[OK] short array element 4
+[OK] short array element 5
+[OK] short array element 6
+[OK] short array element 7
+[OK] short array element 8
+[OK] short array element 9
+[OK] int array element 0
+[OK] int array element 1
+[OK] int array element 2
+[OK] int array element 3
+[OK] int array element 4
+[OK] int array element 5
+[OK] int array element 6
+[OK] int array element 7
+[OK] long array element 0
+[OK] long array element 1
+[OK] long array element 2
+[OK] long array element 3
+[OK] long array element 4
+[OK] long array element 5
+[OK] long array element 6
+[OK] 2D array A[0][0]
+[OK] 2D array A[0][1]
+[OK] 2D array A[0][2]
+[OK] 2D array A[1][0]
+[OK] 2D array A[1][1]
+[OK] 2D array A[1][2]
+[OK] 2D array A[2][0]
+[OK] 2D array A[2][1]
+[OK] 2D array A[2][2]
+[OK] invoke
+[OK] invoke-super
+[OK] invoke-interface
+Running exception tests...
+[OK] RuntimeException Exception caught
+[OK] IllegalArgumentException Exception caught
+Tests passed: 176
+Tests failed: 0
+F:/test_Reverse/sandvik/tests/unit/test_dalvik.cpp:91: Failure
+Expected equality of these values:
+  actualOutput
+    Which is: "\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] Loading runtime library...\x1B[0m\x1B[38;2;255;255;255m\n\x1B[0m\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] Runtime library loaded.\x1B[0m\x1B[38;2;255;255;255m\n\x1B[0m\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] Loading DEX: {}\x1B[0m\x1B[38;2;255;255;255m\n\x1B[0m\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] DEX loaded: {}\x1B[0m\x1B[38;2;255;255;255m\n\x1B[0m\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] Running class: DalvikTest\x1B[0m\x1B[38;2;255;255;255m\n\x1B[0mRunning Dalvik tests...\nRunning branching tests...\n[OK] Positive branch\n[OK] Positive branch\n[OK] Positive branch\n[OK] Zero branch\n[OK] Negative branch\n[OK] Negative branch\n[OK] Negative branch\n[OK] Float compare\n[OK] Float compare\n[OK] Double compare\n[OK] Double compare\nRunning arithmetic tests...\n[OK] Integer arithmetic\n[OK] Long arithmetic\n[OK] Float arithmetic\n[OK] Double arithmetic\n[OK] Integer Literal8 arithmetic\n[OK] Integer Literal16 arithmetic\n[OK] Integer add\n[OK] Integer sub\n[OK] Integer mul\n[OK] Integer div\n[OK] Integer rem\n[OK] Integer and\n[OK] Integer or\n[OK] Integer xor\n[OK] Integer shl\n[OK] Integer shr\n[OK] Integer ushr\n[OK] Long add\n[OK] Long sub\n[OK] Long mul\n[OK] Long div\n[OK] Long rem\n[OK] Long and\n[OK] Long or\n[OK] Long xor\n[OK] Long shl\n[OK] Long shr\n[OK] Long ushr\n[OK] Float add\n[OK] Float sub\n[OK] Float mul\n[OK] Float div\n[OK] Float rem\n[OK] Double add\n[OK] Double sub\n[OK] Double mul\n[OK] Double div\n[OK] Double rem\nRunning logical tests...\n[OK] Integer logical\n[OK] Long logical\n[OK] Negation test\n[OK] Not test\n[OK] and integer test\n[OK] or integer test\n[OK] xor integer test\n[OK] shift left integer test\n[OK] shift right integer test\n[OK] unsigned shift right integer test\n[OK] and long test\n[OK] or long test\n[OK] xor long test\n[OK] shift left long test\n[OK] shift right long test\n[OK] unsigned shift right long test\nRunning cast operation tests...\n[OK] cast int-to-long\n[OK] cast int-to-long\n[OK] cast int-to-float\n[OK] cast int-to-float\n[OK] cast int-to-double\n[OK] cast int-to-double\n[OK] cast long-to-int\n[OK] cast long-to-int\n[OK] cast long-to-float\n[OK] cast long-to-float\n[OK] cast long-to-double\n[OK] cast long-to-double\n[OK] cast float-to-int\n[OK] cast float-to-int\n[OK] cast float-to-long\n[OK] cast float-to-long\n[OK] cast double-to-int\n[OK] cast double-to-int\n[OK] cast double-to-long\n[OK] cast double-to-long\n[OK] cast double-to-float\n[OK] cast double-to-float\n[OK] cast int-to-byte\n[OK] cast int-to-byte\n[OK] cast int-to-char\n[OK] cast int-to-short\n[OK] cast int-to-short\n[OK] cast object-to-string\nRunning switch tests...\n[OK] Switch test\nRunning field and static operation tests...\n[OK] iget-int\n[OK] iget-wide\n[OK] iget-boolean\n[OK] iget-byte\n[OK] iget-char\n[OK] iget-short\n[OK] iget-object\n[OK] sget-int\n[OK] sget-wide\n[OK] sget-boolean\n[OK] sget-byte\n[OK] sget-char\n[OK] sget-short\n[OK] sget-object\n[OK] object-ref-parameter\n[OK] object-ref-parameter\n[OK] object-ref-parameter\n[OK] object-ref-parameter\n[OK] object-ref-parameter\n[OK] object-ref-parameter\n[OK] object-ref-return\n[OK] object-ref-return\n[OK] object-ref-return\n[OK] object-ref-return\n[OK] object-ref-return\n[OK] object-ref-return\n[OK] object-equality\n[OK] object-inequality\nRunning string operation tests...\n[OK] string ops\n[OK] const-class\n[OK] instance-of\nRunning array operation tests...\n[OK] string array\n[OK] array ops\n[OK] char array element 0\n[OK] char array element 1\n[OK] char array element 2\n[OK] char array element 3\n[OK] char array element 4\n[OK] char array element 5\n[OK] char array element 6\n[OK] char array element 7\n[OK] char array element 8\n[OK] char array element 9\n[OK] short array element 0\n[OK] short array element 1\n[OK] short array element 2\n[OK] short array element 3\n[OK] short array element 4\n[OK] short array element 5\n[OK] short array element 6\n[OK] short array element 7\n[OK] short array element 8\n[OK] short array element 9\n[OK] int array element 0\n[OK] int array element 1\n[OK] int array element 2\n[OK] int array element 3\n[OK] int array element 4\n[OK] int array element 5\n[OK] int array element 6\n[OK] int array element 7\n[OK] long array element 0\n[OK] long array element 1\n[OK] long array element 2\n[OK] long array element 3\n[OK] long array element 4\n[OK] long array element 5\n[OK] long array element 6\n[OK] 2D array A[0][0]\n[OK] 2D array A[0][1]\n[OK] 2D array A[0][2]\n[OK] 2D array A[1][0]\n[OK] 2D array A[1][1]\n[OK] 2D array A[1][2]\n[OK] 2D array A[2][0]\n[OK] 2D array A[2][1]\n[OK] 2D array A[2][2]\n[OK] invoke\n[OK] invoke-super\n[OK] invoke-interface\nRunning exception tests...\n[OK] RuntimeException Exception caught\n[OK] IllegalArgumentException Exception caught\nTests passed: 176\nTests failed: 0\n"
+  expectedOutput
+    Which is: "Running Dalvik tests...\nRunning branching tests...\n[OK] Positive branch\n[OK] Positive branch\n[OK] Positive branch\n[OK] Zero branch\n[OK] Negative branch\n[OK] Negative branch\n[OK] Negative branch\n[OK] Float compare\n[OK] Float compare\n[OK] Double compare\n[OK] Double compare\nRunning arithmetic tests...\n[OK] Integer arithmetic\n[OK] Long arithmetic\n[OK] Float arithmetic\n[OK] Double arithmetic\n[OK] Integer Literal8 arithmetic\n[OK] Integer Literal16 arithmetic\n[OK] Integer add\n[OK] Integer sub\n[OK] Integer mul\n[OK] Integer div\n[OK] Integer rem\n[OK] Integer and\n[OK] Integer or\n[OK] Integer xor\n[OK] Integer shl\n[OK] Integer shr\n[OK] Integer ushr\n[OK] Long add\n[OK] Long sub\n[OK] Long mul\n[OK] Long div\n[OK] Long rem\n[OK] Long and\n[OK] Long or\n[OK] Long xor\n[OK] Long shl\n[OK] Long shr\n[OK] Long ushr\n[OK] Float add\n[OK] Float sub\n[OK] Float mul\n[OK] Float div\n[OK] Float rem\n[OK] Double add\n[OK] Double sub\n[OK] Double mul\n[OK] Double div\n[OK] Double rem\nRunning logical tests...\n[OK] Integer logical\n[OK] Long logical\n[OK] Negation test\n[OK] Not test\n[OK] and integer test\n[OK] or integer test\n[OK] xor integer test\n[OK] shift left integer test\n[OK] shift right integer test\n[OK] unsigned shift right integer test\n[OK] and long test\n[OK] or long test\n[OK] xor long test\n[OK] shift left long test\n[OK] shift right long test\n[OK] unsigned shift right long test\nRunning cast operation tests...\n[OK] cast int-to-long\n[OK] cast int-to-long\n[OK] cast int-to-float\n[OK] cast int-to-float\n[OK] cast int-to-double\n[OK] cast int-to-double\n[OK] cast long-to-int\n[OK] cast long-to-int\n[OK] cast long-to-float\n[OK] cast long-to-float\n[OK] cast long-to-double\n[OK] cast long-to-double\n[OK] cast float-to-int\n[OK] cast float-to-int\n[OK] cast float-to-long\n[OK] cast float-to-long\n[OK] cast double-to-int\n[OK] cast double-to-int\n[OK] cast double-to-long\n[OK] cast double-to-long\n[OK] cast double-to-float\n[OK] cast double-to-float\n[OK] cast int-to-byte\n[OK] cast int-to-byte\n[OK] cast int-to-char\n[OK] cast int-to-short\n[OK] cast int-to-short\n[OK] cast object-to-string\nRunning switch tests...\n[OK] Switch test\nRunning field and static operation tests...\n[OK] iget-int\n[OK] iget-wide\n[OK] iget-boolean\n[OK] iget-byte\n[OK] iget-char\n[OK] iget-short\n[OK] iget-object\n[OK] sget-int\n[OK] sget-wide\n[OK] sget-boolean\n[OK] sget-byte\n[OK] sget-char\n[OK] sget-short\n[OK] sget-object\n[OK] object-ref-parameter\n[OK] object-ref-parameter\n[OK] object-ref-parameter\n[OK] object-ref-parameter\n[OK] object-ref-parameter\n[OK] object-ref-parameter\n[OK] object-ref-return\n[OK] object-ref-return\n[OK] object-ref-return\n[OK] object-ref-return\n[OK] object-ref-return\n[OK] object-ref-return\n[OK] object-equality\n[OK] object-inequality\nRunning string operation tests...\n[OK] string ops\n[OK] const-class\n[OK] instance-of\nRunning array operation tests...\n[OK] string array\n[OK] array ops\n[OK] char array element 0\n[OK] char array element 1\n[OK] char array element 2\n[OK] char array element 3\n[OK] char array element 4\n[OK] char array element 5\n[OK] char array element 6\n[OK] char array element 7\n[OK] char array element 8\n[OK] char array element 9\n[OK] short array element 0\n[OK] short array element 1\n[OK] short array element 2\n[OK] short array element 3\n[OK] short array element 4\n[OK] short array element 5\n[OK] short array element 6\n[OK] short array element 7\n[OK] short array element 8\n[OK] short array element 9\n[OK] int array element 0\n[OK] int array element 1\n[OK] int array element 2\n[OK] int array element 3\n[OK] int array element 4\n[OK] int array element 5\n[OK] int array element 6\n[OK] int array element 7\n[OK] long array element 0\n[OK] long array element 1\n[OK] long array element 2\n[OK] long array element 3\n[OK] long array element 4\n[OK] long array element 5\n[OK] long array element 6\n[OK] 2D array A[0][0]\n[OK] 2D array A[0][1]\n[OK] 2D array A[0][2]\n[OK] 2D array A[1][0]\n[OK] 2D array A[1][1]\n[OK] 2D array A[1][2]\n[OK] 2D array A[2][0]\n[OK] 2D array A[2][1]\n[OK] 2D array A[2][2]\n[OK] invoke\n[OK] invoke-super\n[OK] invoke-interface\nRunning exception tests...\n[OK] RuntimeException Exception caught\n[OK] IllegalArgumentException Exception caught\nTests passed: 176\nTests failed: 0\n"
+With diff:
+@@ -1,8 +1,3 @@
+-\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] Loading runtime library...\x1B[0m\x1B[38;2;255;255;255m
+-\x1B[0m\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] Runtime library loaded.\x1B[0m\x1B[38;2;255;255;255m
+-\x1B[0m\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] Loading DEX: {}\x1B[0m\x1B[38;2;255;255;255m
+-\x1B[0m\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] DEX loaded: {}\x1B[0m\x1B[38;2;255;255;255m
+-\x1B[0m\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] Running class: DalvikTest\x1B[0m\x1B[38;2;255;255;255m
+-\x1B[0mRunning Dalvik tests...
++Running Dalvik tests...
+ Running branching tests...
+ [OK] Positive branch
+
+The actual output does not match the expected output.
+
+[  FAILED  ] VM.Dalvik (33 ms)
+[ RUN      ] VM.Native
+[38;2;255;255;255m[0m[38;2;255;255;255m[*] VM instance created.[0m[38;2;255;255;255m
+[0m[38;2;255;255;255m[0m[38;2;255;255;255m[*] Loading self as shared library...[0m[38;2;255;255;255m
+[0m[38;2;255;255;255m[0m[38;2;255;255;255m[*] Self loaded as shared library.[0m[38;2;255;255;255m
+[0m

@@ -1,0 +1,40 @@
+[38;2;255;255;255m[0m[38;2;255;255;255m[*] Loading runtime library...[0m[38;2;255;255;255m
+[0m[38;2;255;255;255m[0m[38;2;255;255;255m[*] Runtime library loaded.[0m[38;2;255;255;255m
+[0m[38;2;255;255;255m[0m[38;2;255;255;255m[*] Loading DEX: {}[0m[38;2;255;255;255m
+[0m[38;2;255;255;255m[0m[38;2;255;255;255m[*] DEX loaded: {}[0m[38;2;255;255;255m
+[0m[38;2;255;255;255m[0m[38;2;255;255;255m[*] Running class: Fibonacci[0m[38;2;255;255;255m
+[0mFibonacci sequence using recursive method:
+0 1 1 2 3 5 8 13 21 34 55 
+
+Fibonacci sequence using iterative method:
+0 1 1 2 3 5 8 13 21 34 55 
+
+Fibonacci number at position 15:
+Recursive: 610
+Iterative: 610
+F:/test_Reverse/sandvik/tests/unit/test_dalvik.cpp:66: Failure
+Expected equality of these values:
+  actualOutput
+    Which is: "\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] Loading runtime library...\x1B[0m\x1B[38;2;255;255;255m\n\x1B[0m\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] Runtime library loaded.\x1B[0m\x1B[38;2;255;255;255m\n\x1B[0m\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] Loading DEX: {}\x1B[0m\x1B[38;2;255;255;255m\n\x1B[0m\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] DEX loaded: {}\x1B[0m\x1B[38;2;255;255;255m\n\x1B[0m\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] Running class: Fibonacci\x1B[0m\x1B[38;2;255;255;255m\n\x1B[0mFibonacci sequence using recursive method:\n0 1 1 2 3 5 8 13 21 34 55 \n\nFibonacci sequence using iterative method:\n0 1 1 2 3 5 8 13 21 34 55 \n\nFibonacci number at position 15:\nRecursive: 610\nIterative: 610\n"
+  expectedOutput
+    Which is: "Fibonacci sequence using recursive method:\n0 1 1 2 3 5 8 13 21 34 55 \n\nFibonacci sequence using iterative method:\n0 1 1 2 3 5 8 13 21 34 55 \n\nFibonacci number at position 15:\nRecursive: 610\nIterative: 610\n"
+With diff:
+@@ -1,8 +1,3 @@
+-\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] Loading runtime library...\x1B[0m\x1B[38;2;255;255;255m
+-\x1B[0m\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] Runtime library loaded.\x1B[0m\x1B[38;2;255;255;255m
+-\x1B[0m\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] Loading DEX: {}\x1B[0m\x1B[38;2;255;255;255m
+-\x1B[0m\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] DEX loaded: {}\x1B[0m\x1B[38;2;255;255;255m
+-\x1B[0m\x1B[38;2;255;255;255m\x1B[0m\x1B[38;2;255;255;255m[*] Running class: Fibonacci\x1B[0m\x1B[38;2;255;255;255m
+-\x1B[0mFibonacci sequence using recursive method:
++Fibonacci sequence using recursive method:
+ 0 1 1 2 3 5 8 13 21 34 55 
+ 
+
+The actual output does not match the expected output.
+
+[  FAILED  ] VM.Fibonacci (26 ms)
+[ RUN      ] VM.Dalvik
+[38;2;255;255;255m[0m[38;2;255;255;255m[*] VM instance created.[0m[38;2;255;255;255m
+[0m[38;2;255;255;255m[0m[38;2;255;255;255m[*] Loading self as shared library...[0m[38;2;255;255;255m
+[0m[38;2;255;255;255m[0m[38;2;255;255;255m[*] Self loaded as shared library.[0m[38;2;255;255;255m
+[0m

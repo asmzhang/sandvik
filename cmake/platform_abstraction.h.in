@@ -1,0 +1,149 @@
+//=============================================================================
+// 平台抽象头文件
+// 自动生成，处理不同平台的差异
+//=============================================================================
+
+#ifndef SANDVIK_PLATFORM_ABSTRACTION_H
+#define SANDVIK_PLATFORM_ABSTRACTION_H
+
+// 平台检测宏
+#if defined(_WIN32) || defined(_WIN64)
+    #define SANDVIK_PLATFORM_WINDOWS 1
+    #define SANDVIK_PLATFORM_POSIX 0
+#elif defined(__linux__)
+    #define SANDVIK_PLATFORM_LINUX 1
+    #define SANDVIK_PLATFORM_POSIX 1
+#elif defined(__APPLE__) && defined(__MACH__)
+    #define SANDVIK_PLATFORM_MACOS 1
+    #define SANDVIK_PLATFORM_POSIX 1
+#elif defined(__ANDROID__)
+    #define SANDVIK_PLATFORM_ANDROID 1
+    #define SANDVIK_PLATFORM_POSIX 1
+#else
+    #error "Unsupported platform"
+#endif
+
+// 编译器检测
+#if defined(__clang__)
+    #define SANDVIK_COMPILER_CLANG 1
+#elif defined(__GNUC__)
+    #define SANDVIK_COMPILER_GCC 1
+#elif defined(_MSC_VER)
+    #define SANDVIK_COMPILER_MSVC 1
+#endif
+
+// DLL导出/导入宏
+#if SANDVIK_PLATFORM_WINDOWS
+    #ifdef SANDVIK_EXPORTS
+        #define SANDVIK_API __declspec(dllexport)
+    #else
+        #define SANDVIK_API __declspec(dllimport)
+    #endif
+#else
+    #define SANDVIK_API __attribute__((visibility("default")))
+#endif
+
+// 共享库处理宏
+#if SANDVIK_PLATFORM_WINDOWS
+    #include <windows.h>
+    #define SANDVIK_DL_HANDLE HMODULE
+    #define SANDVIK_DL_OPEN(path, flags) LoadLibraryExA(path, NULL, 0)
+    #define SANDVIK_DL_SYM(handle, name) GetProcAddress(handle, name)
+    #define SANDVIK_DL_CLOSE(handle) FreeLibrary(handle)
+    #define SANDVIK_DL_ERROR() GetLastError()
+#else
+    #include <dlfcn.h>
+    #define SANDVIK_DL_HANDLE void*
+    #define SANDVIK_DL_OPEN(path, flags) dlopen(path, flags)
+    #define SANDVIK_DL_SYM(handle, name) dlsym(handle, name)
+    #define SANDVIK_DL_CLOSE(handle) dlclose(handle)
+    #define SANDVIK_DL_ERROR() dlerror()
+#endif
+
+// 路径分隔符
+#if SANDVIK_PLATFORM_WINDOWS
+    #define SANDVIK_PATH_SEPARATOR '\\'
+    #define SANDVIK_PATH_SEPARATOR_STR "\\"
+#else
+    #define SANDVIK_PATH_SEPARATOR '/'
+    #define SANDVIK_PATH_SEPARATOR_STR "/"
+#endif
+
+// 行结束符
+#if SANDVIK_PLATFORM_WINDOWS
+    #define SANDVIK_LINE_ENDING "\r\n"
+#else
+    #define SANDVIK_LINE_ENDING "\n"
+#endif
+
+// 线程本地存储
+#if SANDVIK_PLATFORM_WINDOWS
+    #define SANDVIK_THREAD_LOCAL __declspec(thread)
+#else
+    #define SANDVIK_THREAD_LOCAL __thread
+#endif
+
+// 内联汇编宏
+#if SANDVIK_COMPILER_MSVC
+    #define SANDVIK_ASM __asm
+#else
+    #define SANDVIK_ASM __asm__
+#endif
+
+// 对齐宏
+#if SANDVIK_COMPILER_MSVC
+    #define SANDVIK_ALIGN(n) __declspec(align(n))
+#else
+    #define SANDVIK_ALIGN(n) __attribute__((aligned(n)))
+#endif
+
+// 打包结构体
+#if SANDVIK_COMPILER_MSVC
+    #define SANDVIK_PACKED __pragma(pack(push, 1))
+    #define SANDVIK_END_PACKED __pragma(pack(pop))
+#else
+    #define SANDVIK_PACKED _Pragma("pack(push, 1)")
+    #define SANDVIK_END_PACKED _Pragma("pack(pop)")
+#endif
+
+// 禁用警告宏
+#if SANDVIK_COMPILER_MSVC
+    #define SANDVIK_DISABLE_WARNING_PUSH __pragma(warning(push))
+    #define SANDVIK_DISABLE_WARNING_POP __pragma(warning(pop))
+    #define SANDVIK_DISABLE_WARNING(warning_number) __pragma(warning(disable: warning_number))
+#elif SANDVIK_COMPILER_CLANG || SANDVIK_COMPILER_GCC
+    #define SANDVIK_DISABLE_WARNING_PUSH _Pragma("GCC diagnostic push")
+    #define SANDVIK_DISABLE_WARNING_POP _Pragma("GCC diagnostic pop")
+    #define SANDVIK_DISABLE_WARNING(warning_name) _Pragma(GCC diagnostic ignored #warning_name)
+#else
+    #define SANDVIK_DISABLE_WARNING_PUSH
+    #define SANDVIK_DISABLE_WARNING_POP
+    #define SANDVIK_DISABLE_WARNING(warning)
+#endif
+
+// 标准头文件包含
+#if SANDVIK_PLATFORM_WINDOWS
+    // Windows特定头文件
+    #include <direct.h>
+    #include <io.h>
+    #define SANDVIK_ACCESS _access
+    #define SANDVIK_MKDIR(path) _mkdir(path)
+#else
+    // POSIX标准头文件
+    #include <unistd.h>
+    #include <sys/types.h>
+    #include <sys/stat.h>
+    #define SANDVIK_ACCESS access
+    #define SANDVIK_MKDIR(path) mkdir(path, 0755)
+#endif
+
+// 文件系统操作
+#if SANDVIK_PLATFORM_WINDOWS
+    #define SANDVIK_STAT _stat
+    #define SANDVIK_STAT_STRUCT struct _stat
+#else
+    #define SANDVIK_STAT stat
+    #define SANDVIK_STAT_STRUCT struct stat
+#endif
+
+#endif // SANDVIK_PLATFORM_ABSTRACTION_H

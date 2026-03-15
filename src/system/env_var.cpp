@@ -22,6 +22,10 @@
 
 #include <cstdlib>
 
+#ifdef _WIN32
+#include <stdlib.h>
+#endif
+
 using namespace sandvik::system;
 
 std::string env::get(const std::string& name_) {
@@ -31,5 +35,10 @@ std::string env::get(const std::string& name_) {
 }
 
 void env::set(const std::string& name_, const std::string& value_) {
-	if (setenv(name_.c_str(), value_.c_str(), 1) != 0) throw std::runtime_error(fmt::format("Can't set {} environment variable!", name_));
+#ifdef _WIN32
+	if (_putenv_s(name_.c_str(), value_.c_str()) != 0)
+#else
+	if (setenv(name_.c_str(), value_.c_str(), 1) != 0)
+#endif
+		throw std::runtime_error(fmt::format("Can't set {} environment variable!", name_));
 }
