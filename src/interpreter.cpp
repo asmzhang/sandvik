@@ -2314,13 +2314,21 @@ void Interpreter::invoke_virtual(const uint8_t* operand_) {
 	if (!this_ptr->isClass()) {
 		throw VmException("invoke-virtual: this pointer is not an ObjectClass, got {}", this_ptr->toString());
 	}
+
+	std::string classname, methodname, signature;
+	classloader.findMethod(frame.getDexIdx(), methodRef, classname, methodname, signature);
+
+	// Special case: clone() on an array is a VM built-in, not a Java method
+	if (this_ptr->isArray() && methodname == "clone") {
+		frame.setReturnObject(this_ptr->clone());
+		frame.pc() += 5;
+		return;
+	}
+
 	Class* instance = &this_ptr->getClass();
 	if (!instance->isStaticInitialized()) {
 		executeClinit(*instance);
 	}
-
-	std::string classname, methodname, signature;
-	classloader.findMethod(frame.getDexIdx(), methodRef, classname, methodname, signature);
 
 	Method* vmethod = nullptr;
 	while (true) {

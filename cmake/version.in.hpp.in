@@ -1,0 +1,3 @@
+#pragma once
+constexpr std::string_view __GitHash = "@GIT_COMMIT_HASH@";
+constexpr std::string_view __Version = "@PROJECT_VERSION@";

@@ -1,9 +1,11 @@
 [submodule "ext/fmt"]
 	path = ext/fmt
-	url = https://github.com/fmtlib/fmt
+    url = https://github.com/asmzhang/fmt.git
+	branch = my
 [submodule "ext/libffi"]
 	path = ext/libffi
-	url = https://github.com/libffi/libffi.git
+	url = https://github.com/asmzhang/libffi.git
+	branch = my2
 [submodule "ext/LIEF"]
 	path = ext/LIEF
 	url = https://github.com/yag00/LIEF.git
@@ -15,7 +17,10 @@
 	url = https://github.com/google/googletest.git
 [submodule "axml-parser"]
 	path = ext/axml-parser
-	url = https://github.com/yag00/axml-parser.git
+	url = https://github.com/asmzhang/axml-parser.git
+	branch = my
 [submodule "ext/xxHash"]
 	path = ext/xxHash
 	url = https://github.com/Cyan4973/xxHash.git
+[submodule "ext/axml-parser"]
+	branch = my

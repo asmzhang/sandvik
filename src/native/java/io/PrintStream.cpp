@@ -17,12 +17,14 @@
  */
 
 #include <string.h>
+#include <stdio.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 #include <fmt/format.h>
 #include <jni/jni.h>
 
-#include <iostream>
 #include <stdexcept>
 
 #include "exceptions.hpp"
@@ -34,18 +36,24 @@ namespace {
 	void __PrintStream__write(int fd, const std::string& s) {
 		switch (fd) {
 			case 1:
-				std::cout << s;
-				std::cout.flush();
+				fwrite(s.data(), 1, s.size(), stdout);
+				fflush(stdout);
 				break;
 			case 2:
-				std::cerr << s;
-				std::cerr.flush();
+				fwrite(s.data(), 1, s.size(), stderr);
+				fflush(stderr);
 				break;
 			default:
-				ssize_t written = write(fd, s.c_str(), s.size());
-				if (written == -1) {
-					logger.fwarning("Failed to write {} to file descriptor {}", s, fd);
+#ifdef _WIN32
+				logger.fwarning("Failed to write {} to file descriptor {}: raw fd write not supported on Windows", s, fd);
+#else
+				{
+					ssize_t written = write(fd, s.c_str(), s.size());
+					if (written == -1) {
+						logger.fwarning("Failed to write {} to file descriptor {}", s, fd);
+					}
 				}
+#endif
 				break;
 		}
 	}

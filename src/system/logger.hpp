@@ -38,6 +38,7 @@ namespace sandvik {
 	 */
 	class Logger : public Singleton<Logger> {
 		public:
+			static Logger& getInstance();
 			/** enum for log level */
 			enum class LogLevel { DEBUG = 0, INFO, WARNING, OK, ERROR, NONE, ALWAYS = 0x10 };
 

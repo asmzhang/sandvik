@@ -1,0 +1,64 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug: sandvik.exe (Add 5 10)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-debug/sandvik.exe",
+            "args": [
+                "--dex", "../tests/java/add/classes.dex",
+                "--main", "Add",
+                "5", "10"
+            ],
+            "cwd": "${workspaceFolder}/build-debug",
+            "sourceMap": {
+                "/proc/self/cwd": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Debug: VM.Enums",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-debug/test_dalvik.exe",
+            "args": ["--gtest_filter=VM.Enums"],
+            "cwd": "${workspaceFolder}/build-debug",
+            "sourceMap": {
+                "/proc/self/cwd": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Debug: VM.Add",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-debug/test_dalvik.exe",
+            "args": ["--gtest_filter=VM.Add"],
+            "cwd": "${workspaceFolder}/build-debug",
+            "sourceMap": {
+                "/proc/self/cwd": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Debug: VM.Native",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-debug/test_dalvik.exe",
+            "args": ["--gtest_filter=VM.Native"],
+            "cwd": "${workspaceFolder}/build-debug",
+            "sourceMap": {
+                "/proc/self/cwd": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Debug: test_dalvik (all)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-debug/test_dalvik.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}/build-debug",
+            "sourceMap": {
+                "/proc/self/cwd": "${workspaceFolder}"
+            }
+        }
+    ]
+}

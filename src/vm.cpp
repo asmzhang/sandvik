@@ -120,7 +120,11 @@ ClassLoader& Vm::getClassLoader() const {
 void Vm::loadLibrary(const std::string& libName_) {
 	// Load the shared library
 	auto lib = std::make_unique<SharedLibrary>(libName_);
-	lib->load();
+	try {
+		lib->load();
+	} catch (const std::exception& e) {
+		throw VmException("Cannot open library {} : {}", libName_, e.what());
+	}
 	if (lib->isLoaded()) {
 		if (!libName_.empty()) {
 			logger.fdebug("Loaded shared library {}", lib->getFullPath());

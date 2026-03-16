@@ -48,7 +48,11 @@ extern "C" {
 	JNIEXPORT void JNICALL Java_java_lang_System_loadLibrary(JNIEnv* env, jobject obj, jstring libName) {
 		auto jenv = sandvik::native::getNativeInterface(env);
 		auto name = sandvik::native::getString(libName);
+#ifdef _WIN32
+		jenv->getVm().loadLibrary(fmt::format("lib{}.dll", name->str()));
+#else
 		jenv->getVm().loadLibrary(fmt::format("lib{}.so", name->str()));
+#endif
 	}
 
 	JNIEXPORT jint JNICALL Java_java_lang_System_identityHashCode(JNIEnv* env, jobject, jobject obj) {

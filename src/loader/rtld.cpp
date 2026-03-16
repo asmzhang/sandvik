@@ -39,12 +39,18 @@ using namespace sandvik;
 void rtld::load(const std::string& path_, std::vector<std::unique_ptr<Dex>>& dexs_) {
 	auto zip = std::make_unique<ZipReader>();
 	if (path_.empty()) {
+		auto size2 = (uintptr_t)_binary_sanddirt_dex_jar_end - (uintptr_t)_binary_sanddirt_dex_jar_start;
+#ifdef _WIN32
+		// On Windows PE/COFF, ABS symbols don't support the &sym == value trick.
+		// Use end-start directly.
+		auto size = size2;
+#else
 		auto size = (size_t)&_binary_sanddirt_dex_jar_size;
 		// paranoia check
-		auto size2 = (uintptr_t)_binary_sanddirt_dex_jar_end - (uintptr_t)_binary_sanddirt_dex_jar_start;
 		if (size != size2) {
 			throw VmException("Internal error: embedded RT size mismatch {} != {}", size, size2);
 		}
+#endif
 		zip->open((const uint8_t*)_binary_sanddirt_dex_jar_start, size);
 	} else {
 		if (!ZipReader::isValidArchive(path_)) {

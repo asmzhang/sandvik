@@ -1,0 +1,72 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "cmake: configure (Debug)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "-G", "Ninja",
+                "-DCMAKE_BUILD_TYPE=Debug",
+                "-DSANDVIK_TESTS=ON",
+                "-DSANDVIK_DEBUG=ON",
+                "-DCMAKE_C_COMPILER=D:/platform/llvm-mingw-20260311-ucrt-x86_64/bin/x86_64-w64-mingw32-clang.exe",
+                "-DCMAKE_CXX_COMPILER=D:/platform/llvm-mingw-20260311-ucrt-x86_64/bin/x86_64-w64-mingw32-clang++.exe",
+                "-B", "${workspaceFolder}/build-debug",
+                "-S", "${workspaceFolder}"
+            ],
+            "options": { "cwd": "${workspaceFolder}" },
+            "problemMatcher": []
+        },
+        {
+            "label": "cmake: configure (Release)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "-G", "Ninja",
+                "-DCMAKE_BUILD_TYPE=Release",
+                "-DSANDVIK_TESTS=ON",
+                "-DSANDVIK_DEBUG=OFF",
+                "-DCMAKE_C_COMPILER=D:/platform/llvm-mingw-20260311-ucrt-x86_64/bin/x86_64-w64-mingw32-clang.exe",
+                "-DCMAKE_CXX_COMPILER=D:/platform/llvm-mingw-20260311-ucrt-x86_64/bin/x86_64-w64-mingw32-clang++.exe",
+                "-B", "${workspaceFolder}/build",
+                "-S", "${workspaceFolder}"
+            ],
+            "options": { "cwd": "${workspaceFolder}" },
+            "problemMatcher": []
+        },
+        {
+            "label": "ninja: build all (Release)",
+            "type": "shell",
+            "command": "ninja",
+            "args": ["-j4"],
+            "options": { "cwd": "${workspaceFolder}/build" },
+            "group": { "kind": "build", "isDefault": true },
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "ninja: build sandvik_exe (Debug)",
+            "type": "shell",
+            "command": "ninja",
+            "args": ["-j4", "sandvik_exe", "libsandvik.dll"],
+            "options": { "cwd": "${workspaceFolder}/build-debug" },
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "ninja: build test_dalvik (Debug)",
+            "type": "shell",
+            "command": "ninja",
+            "args": ["-j4", "test_dalvik", "libsandvik.dll"],
+            "options": { "cwd": "${workspaceFolder}/build-debug" },
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "ctest: run all",
+            "type": "shell",
+            "command": "ctest",
+            "args": ["--output-on-failure", "-j1"],
+            "options": { "cwd": "${workspaceFolder}/build" },
+            "problemMatcher": []
+        }
+    ]
+}

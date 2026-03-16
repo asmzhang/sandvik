@@ -98,6 +98,7 @@ void JThread::loop() {
 	try {
 		_interpreter->execute();
 	} catch (const VmException& e) {
+		fprintf(stderr, "[VM] VmException: %s\n", e.what());
 		logger.error(e.what());
 		// terminate the whole VM on unhandled exception in thread
 		_vm.stop();
@@ -105,8 +106,10 @@ void JThread::loop() {
 		_stack.clear();
 	} catch (const JavaException& e) {
 		if (e.getMessage().empty()) {
+			fprintf(stderr, "[VM] JavaException: %s\n", e.getExceptionType().c_str());
 			logger.ferror("Unhandled Java exception of type {}", e.getExceptionType());
 		} else {
+			fprintf(stderr, "[VM] JavaException: %s: %s\n", e.getExceptionType().c_str(), e.getMessage().c_str());
 			logger.ferror("Unhandled Java exception of type {}: {}", e.getExceptionType(), e.getMessage());
 		}
 		// terminate the whole VM on unhandled exception in thread

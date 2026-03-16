@@ -43,10 +43,10 @@ JNIEXPORT jdouble JNICALL Java_Native_doubleadd(
     jdouble b              // Second integer parameter
 ) {
     printf("Native doubleadd called with:\n");
-    printf("  Double a: 0x%lx %f\n", *(uint64_t*)&a, a);
-    printf("  Double b: 0x%lx %f\n", *(uint64_t*)&b, b);
+    printf("  Double a: 0x%llx %f\n", (unsigned long long)*(uint64_t*)&a, a);
+    printf("  Double b: 0x%llx %f\n", (unsigned long long)*(uint64_t*)&b, b);
     jdouble result = a + b;
-    printf("  Double r: 0x%lx %f\n", *(uint64_t*)&result, result);
+    printf("  Double r: 0x%llx %f\n", (unsigned long long)*(uint64_t*)&result, result);
     return result;
 }
 JNIEXPORT jlong JNICALL Java_Native_longadd(

@@ -32,6 +32,11 @@
 
 using namespace sandvik;
 
+Trace& Trace::getInstance() {
+	static Trace instance;
+	return instance;
+}
+
 Trace::Trace() : _trace_instructions(false), _trace_calls(false), _disassembler(std::make_unique<Disassembler>()) {
 }
 

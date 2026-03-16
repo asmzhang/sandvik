@@ -39,6 +39,10 @@ namespace sandvik {
 		public:
 			GC();
 			~GC() override;
+			/** Single DLL-local instance — hides Singleton<GC>::getInstance()
+			 *  so that the static variable lives in libsandvik and is shared
+			 *  across DLL boundaries on Windows. */
+			static GC& getInstance();
 			/** Add Vm to be managed by the GC
 			 * @param vm_ Vm to manage
 			 */

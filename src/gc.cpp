@@ -27,6 +27,11 @@
 
 using namespace sandvik;
 
+GC& GC::getInstance() {
+	static GC instance;
+	return instance;
+}
+
 GC::GC() : Thread("GC") {
 }
 

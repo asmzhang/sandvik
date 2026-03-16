@@ -28,6 +28,11 @@
 
 using namespace sandvik;
 
+Logger& Logger::getInstance() {
+	static Logger instance;
+	return instance;
+}
+
 Logger::Logger() {
 }
 
@@ -181,7 +186,11 @@ std::string Logger::getTime() const {
 	auto now = std::chrono::system_clock::now();
 	std::time_t timestamp = std::chrono::system_clock::to_time_t(now);
 	char buf[128];
+#ifdef _WIN32
+	ctime_s(buf, sizeof(buf), &timestamp);
+#else
 	ctime_r(&timestamp, buf);
+#endif
 	std::string timeStr(buf);
 	timeStr.pop_back();  // Remove newline character from the time string
 	return timeStr;
