@@ -33,6 +33,12 @@ if(NOT SANDVIK_USE_GCC AND NOT CMAKE_C_COMPILER_ID)
     endif()
 endif()
 
+# Ensure ASM compiler matches the C compiler (prevents defaulting to
+# system clang with wrong target triple on Windows).
+if(NOT CMAKE_ASM_COMPILER)
+    set(CMAKE_ASM_COMPILER "${CMAKE_C_COMPILER}" CACHE STRING "ASM compiler" FORCE)
+endif()
+
 # ---------------------------------------------------------------------------
 # Compile flags  (mirrors WAF wscript)
 # ---------------------------------------------------------------------------
@@ -53,6 +59,10 @@ endif()
 
 if(WIN32)
     list(APPEND SANDVIK_COMPILE_FLAGS -DFMT_USE_CONSTEVAL=0)
+    # llvm-mingw (UCRT) does not ship liboldnames — remove it from the
+    # standard library list if a previous cmake run left it there.
+    string(REPLACE "-loldnames" "" CMAKE_C_STANDARD_LIBRARIES   "${CMAKE_C_STANDARD_LIBRARIES}")
+    string(REPLACE "-loldnames" "" CMAKE_CXX_STANDARD_LIBRARIES "${CMAKE_CXX_STANDARD_LIBRARIES}")
 endif()
 
 add_compile_options(${SANDVIK_COMPILE_FLAGS})
@@ -91,7 +101,7 @@ endif()
 
 configure_file(
     "${CMAKE_SOURCE_DIR}/cmake/version.in.hpp.in"
-    "${CMAKE_SOURCE_DIR}/src/version.in.hpp"
+    "${CMAKE_BINARY_DIR}/version.in.hpp"
     @ONLY)
 
 # ---------------------------------------------------------------------------
@@ -212,6 +222,7 @@ if(NOT EXISTS "${FFI_INSTALL_DIR}/lib/libffi.a")
         CMAKE_ARGS
             ${_EP_CMAKE_ARGS}
             -DCMAKE_INSTALL_PREFIX=${FFI_INSTALL_DIR}
+            "-DFFI_FFICONFIG_TEMPLATE=${CMAKE_SOURCE_DIR}/cmake/libffi/fficonfig.h.in"
         BUILD_COMMAND     ${CMAKE_COMMAND} --build . -- -j${NPROC}
         INSTALL_COMMAND   ${CMAKE_COMMAND} --build . --target install
         BUILD_BYPRODUCTS  "${FFI_INSTALL_DIR}/lib/libffi.a"
@@ -378,7 +389,7 @@ add_library(sandvik SHARED
     ${SANDVIK_LIB_SOURCES}
     "${_DEX_ASM}")
 
-target_include_directories(sandvik PUBLIC src)
+target_include_directories(sandvik PUBLIC src "${CMAKE_BINARY_DIR}")
 
 target_link_libraries(sandvik
     PUBLIC
