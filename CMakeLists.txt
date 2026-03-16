@@ -1,5 +1,22 @@
 cmake_minimum_required(VERSION 3.24)
 
+# ---------------------------------------------------------------------------
+# llvm-mingw toolchain auto-configuration
+# Pass -DLLVM_MINGW_ROOT=<path> to set all three compiler variables at once.
+# Must be done before project() so the compiler detection uses them.
+# ---------------------------------------------------------------------------
+if(LLVM_MINGW_ROOT AND NOT CMAKE_C_COMPILER)
+    set(CMAKE_C_COMPILER
+        "${LLVM_MINGW_ROOT}/bin/x86_64-w64-mingw32-clang.exe"
+        CACHE STRING "C compiler" FORCE)
+    set(CMAKE_CXX_COMPILER
+        "${LLVM_MINGW_ROOT}/bin/x86_64-w64-mingw32-clang++.exe"
+        CACHE STRING "C++ compiler" FORCE)
+    set(CMAKE_ASM_COMPILER
+        "${LLVM_MINGW_ROOT}/bin/x86_64-w64-mingw32-clang.exe"
+        CACHE STRING "ASM compiler" FORCE)
+endif()
+
 project(sandvik VERSION 1.0.0 LANGUAGES C CXX ASM)
 
 set(CMAKE_CXX_STANDARD 20)
