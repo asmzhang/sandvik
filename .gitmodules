@@ -15,7 +15,7 @@
 [submodule "ext/googletest"]
 	path = ext/googletest
 	url = https://github.com/google/googletest.git
-[submodule "axml-parser"]
+[submodule "ext/axml-parser"]
 	path = ext/axml-parser
 	url = https://github.com/asmzhang/axml-parser.git
 	branch = my
