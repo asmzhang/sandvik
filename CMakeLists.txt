@@ -63,6 +63,23 @@ if(WIN32)
     # standard library list if a previous cmake run left it there.
     string(REPLACE "-loldnames" "" CMAKE_C_STANDARD_LIBRARIES   "${CMAKE_C_STANDARD_LIBRARIES}")
     string(REPLACE "-loldnames" "" CMAKE_CXX_STANDARD_LIBRARIES "${CMAKE_CXX_STANDARD_LIBRARIES}")
+
+    # Detect static C++ runtime archives so we can embed them into every
+    # binary and avoid shipping libc++.dll / libunwind.dll at runtime.
+    execute_process(
+        COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=libc++.a
+        OUTPUT_VARIABLE _LIBCXX_STATIC OUTPUT_STRIP_TRAILING_WHITESPACE)
+    execute_process(
+        COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=libunwind.a
+        OUTPUT_VARIABLE _LIBUNWIND_STATIC OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(EXISTS "${_LIBCXX_STATIC}" AND EXISTS "${_LIBUNWIND_STATIC}")
+        message(STATUS "Static libc++:   ${_LIBCXX_STATIC}")
+        message(STATUS "Static libunwind: ${_LIBUNWIND_STATIC}")
+        set(_STATIC_CXXRT "${_LIBCXX_STATIC}" "${_LIBUNWIND_STATIC}")
+    else()
+        message(WARNING "libc++.a not found — libc++.dll will be required at runtime")
+        set(_STATIC_CXXRT "")
+    endif()
 endif()
 
 add_compile_options(${SANDVIK_COMPILE_FLAGS})
@@ -404,6 +421,9 @@ target_link_libraries(sandvik
 
 if(WIN32)
     target_link_options(sandvik PRIVATE -Wl,--allow-multiple-definition)
+    if(_STATIC_CXXRT)
+        target_link_libraries(sandvik PRIVATE ${_STATIC_CXXRT})
+    endif()
 else()
     target_link_options(sandvik PRIVATE -Wl,-z,defs)
 endif()
@@ -442,7 +462,11 @@ target_link_libraries(sandvik_exe
         ext_xxhash
         Threads::Threads)
 
-if(NOT WIN32)
+if(WIN32)
+    if(_STATIC_CXXRT)
+        target_link_libraries(sandvik_exe PRIVATE ${_STATIC_CXXRT})
+    endif()
+else()
     target_link_options(sandvik_exe PRIVATE -rdynamic -Wl,-z,defs)
 endif()
 
@@ -499,7 +523,8 @@ if(SANDVIK_TESTS)
             ext_gtest
             ext_gtest_main
             ext_fmt
-            Threads::Threads)
+            Threads::Threads
+            ${_STATIC_CXXRT})
 
         add_test(NAME ${test_name} COMMAND ${test_name})
     endforeach()

@@ -40,10 +40,6 @@ cmake -G Ninja `
 
 ninja -C build
 
-# 复制运行时 DLL（首次构建后执行一次）
-copy D:\platform\llvm-mingw-20260311-ucrt-x86_64\bin\libc++.dll build\
-copy D:\platform\llvm-mingw-20260311-ucrt-x86_64\bin\libunwind.dll build\
-
 build\sandvik.exe --dex tests\java\add\classes.dex --main Add 5 10
 ```
 
@@ -71,13 +67,6 @@ ctest --output-on-failure -j1 --test-dir build
 
 # 运行指定测试
 build/test_dalvik.exe --gtest_filter=VM.Add
-```
-
-Windows 测试前额外步骤：
-
-```powershell
-copy D:\platform\llvm-mingw-20260311-ucrt-x86_64\bin\libc++.dll build\
-copy D:\platform\llvm-mingw-20260311-ucrt-x86_64\bin\libunwind.dll build\
 ```
 
 ---
@@ -153,7 +142,7 @@ sandvik/
 | fmt / LIEF 重复符号 | 链接选项 `-Wl,--allow-multiple-definition` |
 | `inet_pton` 未定义 | 链接 `ws2_32` |
 | DLL 单例边界问题 | `GC`、`Logger`、`Trace` 各自提供显式 `getInstance()` 实现 |
-| 运行时缺 DLL | 从工具链目录复制 `libc++.dll`、`libunwind.dll` |
+| 运行时缺 DLL | 已解决：CMake 自动探测并静态链接 `libc++.a`、`libunwind.a`，无需额外 DLL |
 | CMake cache 污染（`-loldnames`、NDK ASM 编译器） | 删除 `build/` 目录，重新配置时显式传 `CMAKE_ASM_COMPILER` |
 | libffi `fficonfig.h` 缺失（GitHub 屏蔽/未提交） | 已解决：由 `ext/libffi/fficonfig.h.in` 在 CMake 配置时自动生成 |
 | libffi `win64.S` 含 `.hidden`（ELF-only 指令） | 已解决：CMakeLists 运行时自动生成去掉 `.hidden` 的 `win64_pe.S` |
