@@ -19,7 +19,6 @@
 #ifndef __LOGGER_HPP__
 #define __LOGGER_HPP__
 
-#include <stdarg.h>
 #include <stdint.h>
 
 #include <fmt/format.h>
@@ -38,7 +37,6 @@ namespace sandvik {
 	 */
 	class Logger : public Singleton<Logger> {
 		public:
-			static Logger& getInstance();
 			/** enum for log level */
 			enum class LogLevel { DEBUG = 0, INFO, WARNING, OK, ERROR, NONE, ALWAYS = 0x10 };
 
@@ -103,33 +101,6 @@ namespace sandvik {
 			 */
 			void ok(const std::string &msg_);
 
-			/** printf like log info message
-			 * @param msg_ message
-			 */
-			void info(const char *msg_, ...);
-			/** printf like log debug message
-			 * @param msg_ printf like format string
-			 */
-			void debug(const char *msg_, ...);
-			/** printf like log warning message
-			 * @param msg_ printf like format string
-			 */
-			void warning(const char *msg_, ...);
-			/** printf like log error message
-			 * @param msg_ printf like format string
-			 */
-			void error(const char *msg_, ...);
-			/** printf like log ok message
-			 * @param msg_ printf like format string
-			 */
-			void ok(const char *msg_, ...);
-
-			/** printf like log info message with custom color and marker
-			 * @param color_ 24 bit hex color
-			 * @param marker_ marker character
-			 * @param msg_ printf like format string
-			 */
-			void color(uint32_t color_, char marker_, const char *msg_, ...);
 			/** log info message with custom color and marker
 			 * @param color_ 24 bit hex color
 			 * @param marker_ marker character
@@ -197,7 +168,7 @@ namespace sandvik {
 
 			bool _stdout = true;
 			bool _time = false;
-			bool _threadname = false;
+			bool _logThreadName = false;
 			LogLevel _level = LogLevel::INFO;
 			std::ofstream _file;
 

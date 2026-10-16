@@ -24,21 +24,24 @@ It is a work in progress, aiming to become a full-featured Dalvik Virtual Machin
 ### Installation
 
 1. Build the project:
-	```bash
-	./waf configure
-	./waf build
-	./waf install
-	```
+
+   ```bash
+   ./waf configure
+   ./waf build
+   ./waf install
+   ```
 
 2. Run the tests:
-	```bash
-	./waf --tests
-	```
+
+   ```bash
+   ./waf --tests
+   ```
 
 3. Run the VM:
-	```bash
-	./sandvik
-	```
+
+   ```bash
+   ./sandvik
+   ```
 
 ## Usage
 
@@ -49,85 +52,107 @@ Sandvik can be used to run Dalvik bytecode files (`.dex`) or Android application
 ```
 
 ### Options
+
 - `-h, --help`
-	Display available options.
+  Display available options.
 
 - `--version`
-	Display the version of this program.
+  Display the version of this program.
 
 - `--log=[level]`
-	Set the log level. Available levels: `NONE`, `DEBUG`, `INFO`, `WARN`, `ERROR`.
+  Set the log level. Available levels: `NONE`, `DEBUG`, `INFO`, `WARN`, `ERROR`.
 
 - `--logfile=[logfile]`
-	Set the log output file.
+  Set the log output file.
 
 - `--no-console`
-	Disable console output.
+  Disable console output.
 
 - `-i, --instructions`
-	Enable instruction trace (prints per-instruction VM execution details).
+  Enable instruction trace (prints per-instruction VM execution details).
 
 - `-c, --calltrace`
-	Enable call trace (prints method entry/exit and call details).
+  Enable call trace (prints method entry/exit and call details).
 
 - `--dex=[file]`
-	Specify the DEX file to load.
+  Specify the DEX file to load.
 
 - `--apk=[file]`
-	Specify the APK file to load.
+  Specify the APK file to load.
+
+- `--android-version=[version]`
+  Specify the Android version to load (must be the name of a folder inside ̀`./android/` directory)
+- ̀`--jar-dir=[dir]`
+  Specify the directory containing the JAR files to load, alternative to ̀`--jar ... --jar ... --jar ...`. If not set `--jar` not specified as well, and if `android-version` is set, it will be defined as `android/{android-version}/bin`. If a `order.txt` file is found in this folder, only JAR mentioned will be loaded and in the specified order.
 
 - `--jar=[file]`
-	Specify the Jar files to load.
+  Specify the JAR files to load.
+
+- ̀`--android-root=[dir]`
+  Specify the directory containing the virtual Android filesystem root directory. If not set and if `android-version` is set, it will be defined as `android/{android-version}/fs`.
 
 - `--main=[classname]`
-	Specify the main class to run.
+  Specify the main class to run.
 
 - `--runtime=[runtime]`
-	Specify path to override the default Java runtime.
+  Specify path to override the default Java runtime.
 
 - `args...`
-	Positional arguments for the Java program.
+  Positional arguments for the Java program.
 
 - `"--"`
-	Can be used to terminate flag options and force all following arguments to be treated as positional options.
+  Can be used to terminate flag options and force all following arguments to be treated as positional options.
 
 ### Examples
 
 To run the `HelloWorld` Java program:
 
 1. Compile the Java source file:
-	```bash
-	javac HelloWorld.java
-	```
+
+   ```bash
+   javac HelloWorld.java
+   ```
 
 2. Convert the compiled `.class` file to Dalvik bytecode using the `d8` tool:
-	```bash
-	d8 HelloWorld.class
-	```
+
+   ```bash
+   d8 HelloWorld.class
+   ```
 
 3. Run the generated `classes.dex` file with Sandvik:
 
 This will execute the `HelloWorld` class from the specified DEX file, showcasing the VM's ability to interpret and run Dalvik bytecode. The output should display the expected behavior of the test program, such as printing "Hello, World!" to the console:
+
 ```bash
-./wbuild/sandvik -i -c --log=INFO --dex tests/java/hello/classes.dex --main=HelloWorld
-[+]  === sandvik 1.0.0-983807d ===
-[*] VM instance created.
-[*] Running class: HelloWorld
-[*] 0000: sget-object v1, string@0                : 62 01 00 00                            HelloWorld::main([Ljava/lang/String;)V
-[java.lang.System.<clinit>] [*] 0000: const/4 v0, #0                          : 12 00                                  java.lang.System::<clinit>()V
-[java.lang.System.<clinit>] [*] 0001: sput-object v0, string@1                : 69 00 01 00                            java.lang.System::<clinit>()V
-[java.lang.System.<clinit>] [*] 0003: sput-object v0, string@2                : 69 00 02 00                            java.lang.System::<clinit>()V
-[java.lang.System.<clinit>] [*] 0005: sput-object v0, string@0                : 69 00 00 00                            java.lang.System::<clinit>()V
-[java.lang.System.<clinit>] [*] 0007: return-void                             : 0e                                     java.lang.System::<clinit>()V
-[java.lang.System.<clinit>] [*] 0000: invoke-static method@9                  : 71 00 09 00 00 00                      java.lang.System::initializeSystemClass()V
-[java.lang.System.<clinit>] [*] invoke-static java.lang.System.initializeStream()V ()
-[java.lang.System.<clinit>] [*] 0003: return-void                             : 0e                                     java.lang.System::initializeSystemClass()V
-[*] 0002: const-string v0, string@1               : 1a 00 01 00                            HelloWorld::main([Ljava/lang/String;)V
-[*] 0004: invoke-virtual {v1, v0}, method@2       : 6e 20 02 00 01 00                      HelloWorld::main([Ljava/lang/String;)V
-[*] invoke-virtual java.io.PrintStream.println(Ljava/lang/String;)V (this=Instance of java.io.PrintStream, String=Hello, World!)
+./wbuild/sandvik --log=NONE --jar android-12.0.0-bin/core-oj.dex.jar --jar android-12.0.0-bin/core-libart.dex.jar --jar android-12.0.0-bin/icu-stubs.dex.jar --dex tests/java/hello/classes.dex --main HelloWorld
+[+]  === sandvik 1.0.0 ===
 Hello, World!
-[*] 0007: return-void                             : 0e                                     HelloWorld::main([Ljava/lang/String;)V
-[*]  === end ===
+```
+
+Let's print instructions and calls :
+
+```bash
+./wbuild/sandvik -i -c --log=INFO --jar android-12.0.0-bin/core-oj.dex.jar --jar android-12.0.0-bin/core-libart.dex.jar --jar android-12.0.0-bin/icu-stubs.dex.jar --dex tests/java/hello/classes.dex --main HelloWorld
+
+...
+[*] 0002: const-string v0, string@1               : 1a 00 01 00                            HelloWorld::main([Ljava/lang/String;)V
+[*] 0004: invoke-virtual {v1, v0}, meth@2         : 6e 20 02 00 01 00                      HelloWorld::main([Ljava/lang/String;)V
+[*] invoke-virtual java.io.PrintStream.println(Ljava/lang/String;)V (this=java.io.PrintStream, "Hello, World!")
+[*] 0000: monitor-enter v1                        : 1d 01                                  java.io.PrintStream::println(Ljava/lang/String;)V
+[*] 0001: invoke-virtual {v1, v2}, meth@1590      : 6e 20 36 06 21 00                      java.io.PrintStream::println(Ljava/lang/String;)V
+[*] invoke-virtual java.io.PrintStream.print(Ljava/lang/String;)V (this=java.io.PrintStream, "Hello, World!")
+[*] 0000: if-nez v1, 0006 // +0004                : 39 01 04                               java.io.PrintStream::print(Ljava/lang/String;)V
+[*] 0004: invoke-direct {v0, v1}, meth@1609       : 70 20 49 06 10 00                      java.io.PrintStream::print(Ljava/lang/String;)V
+[*] invoke-direct java.io.PrintStream.write(Ljava/lang/String;)V (this=java.io.PrintStream, "Hello, World!")
+[*] 0000: monitor-enter v2                        : 1d 02                                  java.io.PrintStream::write(Ljava/lang/String;)V
+[*] 0001: invoke-direct {v2}, meth@1578           : 70 10 2a 06 02 00                      java.io.PrintStream::write(Ljava/lang/String;)V
+[*] invoke-direct java.io.PrintStream.ensureOpen()V (this=java.io.PrintStream)
+[*] 0000: iget-object v0, v2, type@700            : 54 20 bc 02                            java.io.PrintStream::ensureOpen()V
+[*] 0002: if-eqz v0, 0005 // +0003                : 38 00 03                               java.io.PrintStream::ensureOpen()V
+[*] 0004: return-void                             : 0e                                     java.io.PrintStream::ensureOpen()V
+[*] 0004: invoke-direct {v2}, meth@1582           : 70 10 2e 06 02 00                      java.io.PrintStream::write(Ljava/lang/String;)V
+[*] invoke-direct java.io.PrintStream.getTextOut()Ljava/io/BufferedWriter; (this=java.io.PrintStream)
+...
 ```
 
 ## Contributing

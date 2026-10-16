@@ -22,27 +22,44 @@
 #include <filesystem>
 #include <sstream>
 
+#include "array.hpp"
 #include "class.hpp"
+#include "classbuilder.hpp"
 #include "exceptions.hpp"
 #include "field.hpp"
+#include "frame.hpp"
+#include "jthread.hpp"
 #include "loader/apk.hpp"
 #include "loader/dex.hpp"
 #include "loader/rtld.hpp"
 #include "method.hpp"
+#include "object.hpp"
 #include "system/logger.hpp"
+#include "system/os_constants.hpp"
 #include "types.hpp"
+#include "utils.hpp"
+#include "vm.hpp"
 
 using namespace sandvik;
 
-ClassLoader::ClassLoader() {
-}
+ClassLoader::ClassLoader() = default;
 
-ClassLoader::~ClassLoader() {
-}
+ClassLoader::~ClassLoader() = default;
 
-void ClassLoader::loadRt(const std::string& rt_) {
+void ClassLoader::loadRtByDir(const std::string& rt_) {
 	try {
-		rtld::load(rt_, _dexs);
+		rtld::load(rt_, _dexs, &_jars);
+		logger.fdebug("RT loaded: {}", rt_);
+	} catch (const std::exception& e) {
+		logger.ferror("Failed to load DEX: {}", e.what());
+		return;
+	}
+}
+
+void ClassLoader::loadRtByFile(const std::string& rt_) {
+	try {
+		rtld::loadJar(rt_, _dexs);
+		_jars.push_back(rt_);
 		logger.fdebug("RT loaded: {}", rt_);
 	} catch (const std::exception& e) {
 		logger.ferror("Failed to load DEX: {}", e.what());
@@ -72,6 +89,15 @@ void ClassLoader::loadApk(const std::string& apk_) {
 	}
 }
 
+std::optional<std::vector<uint8_t>> ClassLoader::findResource(const std::string& name) {
+	for (const auto& jarPath : _jars) {
+		if (auto data = rtld::findResourceInJar(jarPath, name)) {
+			return data;
+		}
+	}
+	return std::nullopt;
+}
+
 void ClassLoader::addClassPath(const std::string& classpath_) {
 	if (std::find(_classpath.begin(), _classpath.end(), classpath_) == _classpath.end()) {
 		logger.fdebug("classpath add {}", classpath_);
@@ -90,6 +116,10 @@ std::string ClassLoader::getClassPath() const {
 		}
 	}
 	return oss.str();
+}
+
+const std::vector<std::string>& ClassLoader::getClassPathEntries() const {
+	return _classpath;
 }
 
 std::string ClassLoader::getMainActivity() const {
@@ -112,11 +142,28 @@ Class& ClassLoader::getMainActivityClass() {
 }
 
 void ClassLoader::addClass(std::unique_ptr<Class> class_) {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	_classes[class_->getFullname()] = std::move(class_);
 }
 
+bool ClassLoader::isLoaded(const std::string& classname_) const {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
+	auto normalized = classname_;
+	if (normalized.size() > 2 && normalized.front() == 'L' && normalized.back() == ';') {
+		normalized = normalized.substr(1, normalized.size() - 2);
+	}
+	std::replace(normalized.begin(), normalized.end(), '/', '.');
+	return _classes.find(normalized) != _classes.end();
+}
+
 Class& ClassLoader::getOrLoad(const std::string& classname_) {
-	auto dotclassname = classname_;
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
+	auto normalized = classname_;
+	// Accept object descriptors (e.g. Ljava/lang/String;) in addition to binary names.
+	if (normalized.size() > 2 && normalized.front() == 'L' && normalized.back() == ';') {
+		normalized = normalized.substr(1, normalized.size() - 2);
+	}
+	auto dotclassname = normalized;
 	std::replace(dotclassname.begin(), dotclassname.end(), '/', '.');
 	// Check if the class is already loaded
 	auto it = _classes.find(dotclassname);
@@ -129,6 +176,7 @@ Class& ClassLoader::getOrLoad(const std::string& classname_) {
 			if (classPtr->isExternal()) {
 				continue;
 			}
+			linkClass(*classPtr);
 			_classes[dotclassname] = std::move(classPtr);
 			return *(_classes[dotclassname]);
 		} catch (std::exception& e) {
@@ -137,7 +185,7 @@ Class& ClassLoader::getOrLoad(const std::string& classname_) {
 	}
 	for (auto& classpath : _classpath) {
 		try {
-			auto slashclassname = classname_;
+			auto slashclassname = normalized;
 			std::replace(slashclassname.begin(), slashclassname.end(), '.', '/');
 			std::string fullPath = classpath;
 			if (fullPath.back() != '/') {
@@ -148,15 +196,46 @@ Class& ClassLoader::getOrLoad(const std::string& classname_) {
 				auto dex = std::make_unique<Dex>(fullPath);
 				_classes[dotclassname] = dex->findClass(*this, dotclassname);
 				_dexs.push_back(std::move(dex));
-				logger.fok("class {} loaded", dotclassname);
+				linkClass(*(_classes[dotclassname]));
 				return *(_classes[dotclassname]);
 			}
 		} catch (std::exception&) {
 			// pass
 		}
 	}
+	// Handle native array types like [B, [I, etc., including multi-dimensional arrays
+	// Create a synthetic array Class object
+	if (dotclassname[0] == '[') {
+		// Determine component descriptor
+		std::string componentDesc = dotclassname.substr(1);
+		// Load component class (make sure it exists)
+		if (componentDesc[0] == 'L') {
+			// Object array: [Ljava/lang/String;
+			componentDesc = componentDesc.substr(1, componentDesc.size() - 2);
+			getOrLoad(componentDesc);
+		} else if (componentDesc[0] == '[') {
+			// Multi-dimensional array
+			getOrLoad(componentDesc);
+		}
+
+		auto builder = ClassBuilder(*this, "", dotclassname);
+		builder.setSuperClass("java.lang.Object");
+		builder.addInterface("java.lang.Cloneable");
+		builder.addInterface("java.io.Serializable");
+		builder.setArray(true);
+		builder.setComponentType(componentDesc);
+		builder.finalize();
+		return *(_classes[dotclassname]);
+	}
+	// Handle primitive types
+	if (dotclassname.size() == 1) {
+		std::string type(1, dotclassname[0]);
+		auto primitiveType = get_primitive_type(type);
+		return getOrLoad(primitiveType);
+	}
+
 	// If the class is not found, throw an exception
-	throw VmException("ClassNotFoundError: {}", dotclassname);
+	throw ClassNotFoundException(fmt::format("Class not found: {} ", dotclassname));
 }
 
 Method& ClassLoader::resolveMethod(uint32_t dex_, uint16_t idx_, std::string& classname_, std::string& method_, std::string& sig_) {
@@ -261,8 +340,101 @@ uint64_t ClassLoader::getDexIndex(const Dex& dex_) const {
 	throw VmException("DEX not found in classloader");
 }
 
+void ClassLoader::setVm(Vm& vm_) {
+	_vm = &vm_;
+}
+
+Vm& ClassLoader::getVm() const {
+	if (!_vm) throw VmException("ClassLoader has no associated Vm");
+	return *_vm;
+}
+
 void ClassLoader::visitReferences(const std::function<void(Object*)>& visitor_) const {
+	std::lock_guard<std::recursive_mutex> lock(_mutex);
 	for (const auto& [name, classPtr] : _classes) {
 		classPtr->visitReferences(visitor_);
+	}
+}
+
+void ClassLoader::linkClass(Class& class_) {
+	if (class_.getFullname() == "java.lang.Class") {
+		class_.getMethod("getComponentType", "()Ljava/lang/Class;").makeNative();
+		if (class_.hasMethod("getSuperclass", "()Ljava/lang/Class;")) {
+			class_.getMethod("getSuperclass", "()Ljava/lang/Class;").makeNative();
+		}
+		if (class_.hasMethod("getEnumConstantsShared", "()[Ljava/lang/Object;")) {
+			class_.getMethod("getEnumConstantsShared", "()[Ljava/lang/Object;").makeNative();
+		}
+		if (class_.hasMethod("getEnumConstantsShared", "()[Ljava/lang/Enum;")) {
+			class_.getMethod("getEnumConstantsShared", "()[Ljava/lang/Enum;").makeNative();
+		}
+		return;
+	}
+
+	if (class_.getFullname() == "java.lang.Object") {
+		class_.getMethod("getClass", "()Ljava/lang/Class;").makeNative();
+		class_.getMethod("hashCode", "()I").makeNative();
+		return;
+	}
+
+	if (class_.getFullname() == "java.lang.VMClassLoader") {
+		class_.getMethod("getResource", "(Ljava/lang/String;)Ljava/net/URL;").makeNative();
+		return;
+	}
+
+	if (class_.getFullname() == "android.system.OsConstants") {
+		// placeholder() isn't actually native in this dex (ACC_NATIVE not set, body is "return 0"); hook it to feed real host values in field-declaration
+		// order.
+		class_.getMethod("placeholder", "()I").hook([](Frame& frame, std::vector<ObjectRef>& args) {
+			(void)args;
+			static thread_local size_t callIndex = 0;
+			const auto& table = sandvik::osconst::orderedTable();
+			if (callIndex >= table.size()) {
+				callIndex = 0;
+			}
+			frame.setReturnValue(static_cast<int32_t>(table[callIndex++].value));
+		});
+		return;
+	}
+
+	if (class_.getFullname() == "java.lang.ref.ReferenceQueue") {
+		auto& addMethod = class_.getMethod("add", "(Ljava/lang/ref/Reference;)V");
+		addMethod.hook([](Frame& frame, std::vector<ObjectRef>& args) {
+			// args: [0] = reference (static method, no 'this')
+			if (args.size() != 1) {
+				throw VmException("Invalid number of arguments for ReferenceQueue.add");
+			}
+			auto reference = args[0];
+			if (reference->isNull()) {
+				return;
+			}
+			// Sandvik has no real daemon thread draining the finalizer queue,
+			// so we simulate it synchronously here: immediately invoke
+			// finalize() on the reference's zombie/referent instead of truly
+			// enqueueing for later async processing.
+			auto zombie = reference->getField("zombie");
+			if (zombie->isNull()) {
+				return;
+			}
+
+			auto& cls = zombie->getClass();
+			if (!cls.hasMethod("finalize", "()V")) {
+				return;
+			}
+			auto& finalizeMethod = cls.getMethod("finalize", "()V");
+			if (finalizeMethod.isNative() || !finalizeMethod.hasBytecode()) {
+				return;
+			}
+			// Create a new thread to run the finalize method
+			auto& classloader = cls.getClassLoader();
+			auto& vm = classloader.getVm();
+			auto& currentThread = vm.currentThread();
+			auto& thread = currentThread.newChild(fmt::format("{}.finalize", cls.getFullname()));
+			auto& newframe = thread.newFrame(finalizeMethod);
+			newframe.setObjRegister(newframe.getMethod().getNbRegisters() - 1, zombie);
+			thread.runInCurrentThread();
+			currentThread.popChild();
+		});
+		return;
 	}
 }

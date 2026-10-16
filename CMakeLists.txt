@@ -217,33 +217,8 @@ sandvik_ext_static(
     EP_NAME     ${_FMT_EP})
 
 # ---------------------------------------------------------------------------
-# LIEF
+# LIEF — removed upstream (main now ships its own DEX parser: src/loader/dex/*)
 # ---------------------------------------------------------------------------
-set(LIEF_INSTALL_DIR "${CMAKE_SOURCE_DIR}/ext/LIEF-bin")
-if(NOT EXISTS "${LIEF_INSTALL_DIR}/include/LIEF/version.h")
-    ExternalProject_Add(lief_ep
-        SOURCE_DIR  "${CMAKE_SOURCE_DIR}/ext/LIEF"
-        BINARY_DIR  "${CMAKE_SOURCE_DIR}/ext/LIEF/build"
-        CMAKE_ARGS
-            ${_EP_CMAKE_ARGS}
-            -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-            -DCMAKE_INSTALL_PREFIX=${LIEF_INSTALL_DIR}
-            "-DCMAKE_CXX_FLAGS=-include stdlib.h -include cstdlib"
-            -DLIEF_EXAMPLES=OFF
-            -DLIEF_TESTS=OFF
-            -DLIEF_PYTHON_API=OFF
-            -DLIEF_C_API=OFF
-        BUILD_COMMAND     ${CMAKE_COMMAND} --build . -- -j${NPROC}
-        INSTALL_COMMAND   ${CMAKE_COMMAND} --build . --target install
-        BUILD_BYPRODUCTS  "${LIEF_INSTALL_DIR}/lib/libLIEF.a"
-    )
-    set(_LIEF_EP lief_ep)
-endif()
-sandvik_ext_static(
-    TARGET      ext_lief
-    INSTALL_DIR ${LIEF_INSTALL_DIR}
-    LIB_NAME    libLIEF.a
-    EP_NAME     ${_LIEF_EP})
 
 # ---------------------------------------------------------------------------
 # libffi  (autotools)
@@ -416,7 +391,9 @@ add_custom_command(
 # ---------------------------------------------------------------------------
 file(GLOB_RECURSE SANDVIK_LIB_SOURCES
     "src/*.cpp"
-    "src/*.c")
+    "src/*.c"
+    "android/*/natives/*.cpp"
+    "android/*/natives/*.c")
 list(FILTER SANDVIK_LIB_SOURCES EXCLUDE REGEX "src/main\\.cpp$")
 
 add_library(sandvik SHARED
@@ -428,7 +405,6 @@ target_include_directories(sandvik PUBLIC src "${CMAKE_BINARY_DIR}")
 target_link_libraries(sandvik
     PUBLIC
         ext_fmt
-        ext_lief
         ext_ffi
         ext_axml
         ext_xxhash
@@ -473,7 +449,6 @@ target_link_libraries(sandvik_exe
         sandvik
         ext_fmt
         ext_args
-        ext_lief
         ext_ffi
         ext_axml
         ext_xxhash

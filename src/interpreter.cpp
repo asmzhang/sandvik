@@ -325,26 +325,55 @@ void Interpreter::executeClinit(Class& class_) const {
 		// Nothing to do
 		return;
 	}
-	// Create a new thread to execute the <clinit> method
-	auto& thread = _rt.vm().newThread(fmt::format("{}.{}", class_.getFullname(), "<clinit>"));
-	if (hasInitializeMethod) {
-		// push new frame with initializeSystemClass method (should be executed after <clinit>)
-		auto& initializeSystemClass = class_.getMethod("initializeSystemClass", "()V");
-		thread.newFrame(initializeSystemClass);
+	logger.fdebug("Executing <clinit> for class {}", class_.getFullname());
+	// lock the class to prevent concurrent initialization
+	class_.monitorEnter();
+	// auto unlock the class at the end of the function
+	struct MonitorGuard {
+			Class& class_;
+			explicit MonitorGuard(Class& class__) : class_(class__) {
+			}
+			~MonitorGuard() {
+				class_.monitorExit();
+			}
+			MonitorGuard(const MonitorGuard&) = delete;
+			MonitorGuard& operator=(const MonitorGuard&) = delete;
+	} guard{class_};
+
+	if (class_.isStaticInitialized()) {
+		return;
 	}
+
+	Method* initializeSystemClass = nullptr;
+	if (hasInitializeMethod) {
+		initializeSystemClass = &class_.getMethod("initializeSystemClass", "()V");
+	}
+	Method* clinitMethod = nullptr;
 	if (hasClinitMethod) {
-		// push new frame with <clinit> method
-		auto& clinitMethod = class_.getMethod("<clinit>", "()V");
-		if (clinitMethod.isNative()) {
+		clinitMethod = &class_.getMethod("<clinit>", "()V");
+		if (clinitMethod->isNative()) {
 			throw VmException("Native <clinit> method for class {} is not supported!", class_.getFullname());
 		}
-		if (!clinitMethod.hasBytecode()) {
+		if (!clinitMethod->hasBytecode()) {
 			throw VmException("<clinit> method for class {} has no bytecode!", class_.getFullname());
 		}
-		thread.newFrame(clinitMethod);
 	}
-	thread.run(true);
-	thread.join();
+	class_.setStaticInitialized();
+
+	// Create a new "fake" thread to execute the <clinit> method (thread will be run in the current thread)
+	auto& currentThread = _rt.vm().currentThread();
+	auto& thread = currentThread.newChild(fmt::format("{}.{}", class_.getFullname(), "<clinit>"));
+	if (initializeSystemClass != nullptr) {
+		// push new frame with initializeSystemClass method (should be executed after <clinit>)
+		thread.newFrame(*initializeSystemClass);
+	}
+	if (clinitMethod != nullptr) {
+		// push new frame with <clinit> method
+		thread.newFrame(*clinitMethod);
+	}
+	thread.runInCurrentThread();
+	currentThread.popChild();
+	logger.fdebug("Executing <clinit> for class {} OK", class_.getFullname());
 }
 
 void Interpreter::executeNativeMethod(const Method& method_, const std::vector<ObjectRef>& args_) {
@@ -377,6 +406,68 @@ void Interpreter::executeNativeMethod(const Method& method_, const std::vector<O
 	if (returnType != "V") {
 		_rt.currentFrame().setReturnObject(ret);
 	}
+}
+
+Method* Interpreter::resolveInterfaceHierarchyMethod(Class& interfaceClass_, const std::string& methodname_, const std::string& signature_,
+                                                     std::unordered_set<std::string>& visited_) const {
+	if (!visited_.insert(interfaceClass_.getFullname()).second) {
+		return nullptr;
+	}
+
+	try {
+		auto& method = interfaceClass_.getMethod(methodname_, signature_);
+		if (!method.isStatic()) {
+			return &method;
+		}
+	} catch (...) {
+	}
+
+	auto& classloader = _rt.getClassLoader();
+	for (const auto& parentInterfaceName : interfaceClass_.getInterfaces()) {
+		auto& parentInterface = classloader.getOrLoad(parentInterfaceName);
+		if (!parentInterface.isStaticInitialized()) {
+			executeClinit(parentInterface);
+		}
+		if (auto* method = resolveInterfaceHierarchyMethod(parentInterface, methodname_, signature_, visited_)) {
+			return method;
+		}
+	}
+
+	return nullptr;
+}
+
+Method* Interpreter::resolveInterfaceMethod(Class& instance_, const std::string& ifclassname_, const std::string& methodname_,
+                                            const std::string& signature_) const {
+	auto& classloader = _rt.getClassLoader();
+
+	Class* current = &instance_;
+	while (current) {
+		try {
+			auto& method = current->getMethod(methodname_, signature_);
+			if (!method.isStatic()) {
+				return &method;
+			}
+		} catch (...) {
+		}
+
+		if (current->hasSuperClass()) {
+			current = &classloader.getOrLoad(current->getSuperClassname());
+			if (!current->isStaticInitialized()) {
+				executeClinit(*current);
+			}
+		} else {
+			current = nullptr;
+		}
+	}
+
+	auto& iface = classloader.getOrLoad(ifclassname_);
+
+	if (!iface.isStaticInitialized()) {
+		executeClinit(iface);
+	}
+
+	std::unordered_set<std::string> visited;
+	return resolveInterfaceHierarchyMethod(iface, methodname_, signature_, visited);
 }
 
 void Interpreter::handleException(ObjectRef exception_) {
@@ -444,6 +535,86 @@ std::vector<ObjectRef> Interpreter::getInvokeMethodArgs(const uint8_t* operand_)
 		args.push_back(obj);
 	}
 	return args;
+}
+
+bool Interpreter::tryRedirectToStringFactory(const Method& method, const std::vector<ObjectRef>& args, uint32_t thisRegIdx) {
+	// Check if the method is a constructor of java.lang.String
+	if (method.getName() != "<init>" || method.getClass().getFullname() != "java.lang.String") {
+		return false;
+	}
+	// Search for a matching signature in the STRING_FACTORY_MAPPINGS
+	const StringFactoryMapping* mapping = nullptr;
+	for (const auto& entry : STRING_FACTORY_MAPPINGS) {
+		if (entry.initSig == method.getSignature()) {
+			mapping = &entry;
+			break;
+		}
+	}
+	logger.fdebug("Redirecting String constructor {} to StringFactory method {}", method.getSignature(), mapping ? mapping->targetSig : "none");
+	// If no mapping is found, return false to fallback on the standard behavior
+	if (!mapping) {
+		return false;
+	}
+	// Prepare the arguments for the StringFactory method, excluding the 'this' reference
+	std::vector<ObjectRef> factoryArgs(args.begin() + 1, args.end());
+	if (mapping->initSig == "([CII)V") {
+		factoryArgs = {factoryArgs[1], factoryArgs[2], factoryArgs[0]};
+	}
+	// Load the StringFactory class and retrieve the corresponding method
+	auto& sfClass = _rt.getClassLoader().getOrLoad("Ljava/lang/StringFactory;");
+	auto& sfMethod = sfClass.getMethod(std::string(mapping->targetName), std::string(mapping->targetSig));
+	// If the StringFactory method is native, execute it directly; otherwise, create a new frame for it
+	if (sfMethod.isNative()) {
+		executeNativeMethod(sfMethod, factoryArgs);
+		auto& frame = _rt.currentFrame();
+		sandvik::ObjectRef newString = frame.getReturnObject();
+		frame.setObjRegister(thisRegIdx, newString);
+	} else {
+		auto& newframe = _rt.newFrame(sfMethod);
+		for (size_t i = 0; i < factoryArgs.size(); ++i) {
+			uint32_t regIdx = sfMethod.getNbRegisters() - factoryArgs.size() + i;
+			newframe.setObjRegister(regIdx, factoryArgs[i]);
+		}
+		// Store the 'this' register index for the new frame to set the return value later
+		_stringCtorFixups[&newframe] = thisRegIdx;
+	}
+	return true;
+}
+
+void Interpreter::registerFinalizerIfNeeded(Class& cls_, ObjectRef obj_) const {
+	// java.lang.Object.finalize() is a no-op; only classes that actually
+	// override it need to be tracked by java.lang.ref.FinalizerReference,
+	// mirroring what ART's native allocator does automatically on real
+	// Android. We only register when THIS class (not an inherited one)
+	// declares finalize() -- walking the hierarchy would double-register
+	// objects whose finalize() comes from a finalizable superclass, since
+	// the superclass's own instances already get registered when built.
+	if (cls_.getFullname() == "java.lang.Object") {
+		return;
+	}
+	static const std::unordered_set<std::string> excluded = {
+	    "java.lang.ref.FinalizerReference", "java.lang.ref.Reference",     "java.lang.ref.ReferenceQueue",
+	    "java.lang.ref.WeakReference",      "java.lang.ref.SoftReference", "java.lang.ref.PhantomReference",
+	};
+	if (excluded.count(cls_.getFullname())) {
+		return;
+	}
+	if (!cls_.hasMethod("finalize", "()V")) {
+		return;
+	}
+	auto& classloader = _rt.getClassLoader();
+	auto& frClass = classloader.getOrLoad("java.lang.ref.FinalizerReference");
+	auto& addMethod = frClass.getMethod("add", "(Ljava/lang/Object;)V");
+
+	// Create a new "fake" thread to execute the add() method (thread will be run in the current thread)
+	auto& currentThread = _rt.vm().currentThread();
+	auto& thread = currentThread.newChild(fmt::format("{}.{}", frClass.getFullname(), "add"));
+	auto& newframe = thread.newFrame(addMethod);
+	// Single Object param, static method
+	auto regidx = newframe.getMethod().getNbRegisters() - 1;
+	newframe.setObjRegister(regidx, obj_);
+	thread.runInCurrentThread();
+	currentThread.popChild();
 }
 
 // nop
@@ -588,11 +759,24 @@ void Interpreter::return_wide(const uint8_t* operand_) {
 void Interpreter::return_object(const uint8_t* operand_) {
 	uint8_t dest = operand_[0];
 	auto ret = _rt.currentFrame().getObjRegister(dest);
+	Frame* returningFrame = &_rt.currentFrame();
+
+	// Check if there is a fixup for the returning frame (used for String constructor redirection)
+	auto fixupIt = _stringCtorFixups.find(returningFrame);
+	bool hasFixup = (fixupIt != _stringCtorFixups.end());
+	uint32_t fixupRegIdx = hasFixup ? fixupIt->second : 0;
+	if (hasFixup) {
+		_stringCtorFixups.erase(fixupIt);
+	}
+
 	_rt.popFrame();
 	if (_rt.end()) {
 		// main method return
 		_rt.setReturnObject(ret);
 		return;
+	}
+	if (hasFixup) {
+		_rt.currentFrame().setObjRegister(fixupRegIdx, ret);
 	} else {
 		_rt.currentFrame().setReturnObject(ret);
 	}
@@ -724,8 +908,12 @@ void Interpreter::check_cast(const uint8_t* operand_) {
 	uint16_t typeIndex = *(const uint16_t*)&operand_[1];
 	auto& frame = _rt.currentFrame();
 	auto obj = frame.getObjRegister(reg);
+
+	// check-cast null is LEGAL in Java and Dalvik.
 	if (obj->isNull()) {
-		throw NullPointerException("check_cast on null object");
+		// null can be cast to anything
+		frame.pc() += 3;
+		return;
 	}
 
 	auto& classloader = _rt.getClassLoader();
@@ -798,7 +986,9 @@ void Interpreter::array_length(const uint8_t* operand_) {
 	auto& frame = _rt.currentFrame();
 	auto obj = frame.getObjRegister(src);
 	if (obj->isNull()) {
-		throw NullPointerException("array_length on null object");
+		const auto& method = frame.getMethod();
+		throw NullPointerException(
+		    fmt::format("array_length on null object in {}.{}{}", method.getClass().getFullname(), method.getName(), method.getSignature()));
 	}
 	uint32_t length = obj->getArrayLength();
 	frame.setIntRegister(dest, length);
@@ -820,7 +1010,10 @@ void Interpreter::new_instance(const uint8_t* operand_) {
 	}
 
 	logger.fdebug("new {}", cls.getFullname());
-	frame.setObjRegister(dest, Object::make(cls));
+	auto obj = Object::make(cls);
+	frame.setObjRegister(dest, obj);
+
+	registerFinalizerIfNeeded(cls, obj);
 	frame.pc() += 3;
 }
 // new-array vA, vB, type@CCCC
@@ -870,8 +1063,32 @@ void Interpreter::filled_new_array(const uint8_t* operand_) {
 }
 // filled-new-array/range {vCCCC .. vNNNN}, type@BBBB
 void Interpreter::filled_new_array_range(const uint8_t* operand_) {
-	// We have not found Java code generating this instruction yet due to recent d8 compiler.
-	throw VmException("filled_new_array_range not implemented");
+	// NOT TESTED: We have not found Java code generating this instruction yet due to recent d8 compiler.
+	const uint8_t count = operand_[0];
+	const uint16_t typeIndex = *reinterpret_cast<const uint16_t*>(&operand_[1]);
+	const uint16_t startReg = *reinterpret_cast<const uint16_t*>(&operand_[3]);
+
+	auto& frame = _rt.currentFrame();
+	auto& classloader = _rt.getClassLoader();
+
+	auto arrayType = classloader.resolveArray(frame.getDexIdx(), typeIndex);
+	if (arrayType.empty()) {
+		throw VmException("filled-new-array/range: cannot resolve array type for index {}", typeIndex);
+	}
+
+	std::vector<ObjectRef> args;
+	args.reserve(count);
+	for (uint8_t i = 0; i < count; ++i) {
+		args.push_back(frame.getObjRegister(startReg + i));
+	}
+
+	const auto& compClass = classloader.getOrLoad(arrayType[0].first);
+	auto array = Array::make(compClass, count);
+	for (uint8_t i = 0; i < args.size(); ++i) {
+		array->setElement(i, args[i]);
+	}
+	frame.setReturnObject(array);
+	frame.pc() += 5;
 }
 // fill-array-data vAA, +BBBBBBBB
 void Interpreter::fill_array_data(const uint8_t* operand_) {
@@ -1372,7 +1589,7 @@ void Interpreter::aget_boolean(const uint8_t* operand_) {
 	if (!element->isNumberObject()) {
 		throw VmException("aget-boolean: Array element is not a number object");
 	}
-	bool value = element->getValue() != 0;
+	bool value = static_cast<uint8_t>(element->getValue()) != 0;
 	frame.setIntRegister(dest, value);
 	frame.pc() += 3;
 }
@@ -1551,7 +1768,7 @@ void Interpreter::aput_boolean(const uint8_t* operand_) {
 	}
 
 	int32_t index = frame.getIntRegister(indexReg);
-	bool value = frame.getIntRegister(valueReg) != 0;
+	bool value = static_cast<uint8_t>(frame.getIntRegister(valueReg)) != 0;
 	if (index < 0 || (uint32_t)index >= array->getArrayLength()) {
 		throw ArrayIndexOutOfBoundsException("aput-boolean: Array index out of bounds");
 	}
@@ -1730,7 +1947,7 @@ void Interpreter::iget_boolean(const uint8_t* operand_) {
 	if (!fieldObj || !fieldObj->isNumberObject()) {
 		throw VmException("iget_boolean: Field {} is not a number object", field.getName());
 	}
-	bool value = static_cast<bool>(fieldObj->getValue());
+	bool value = static_cast<uint8_t>(fieldObj->getValue()) != 0;
 	logger.fdebug("iget_boolean {}.{}={}", field.getClass().getFullname(), field.getName(), value);
 	frame.setIntRegister(dest, value);
 	frame.pc() += 3;
@@ -1911,7 +2128,7 @@ void Interpreter::iput_boolean(const uint8_t* operand_) {
 		throw VmException("iput_boolean: Field {} type mismatch, expected boolean but got {}", field.getName(), field.getType());
 	}
 
-	bool value = frame.getIntRegister(src) != 0;
+	bool value = static_cast<uint8_t>(frame.getIntRegister(src)) != 0;
 	logger.fdebug("iput_boolean {}.{}={}", field.getClass().getFullname(), field.getName(), value);
 	obj->setField(field.getName(), Object::make(value));
 	frame.pc() += 3;
@@ -2039,7 +2256,6 @@ void Interpreter::sget_object(const uint8_t* operand_) {
 	auto& classloader = _rt.getClassLoader();
 
 	const auto& field = classloader.resolveField(frame.getDexIdx(), fieldIndex);
-	logger.fdebug("sget_object: Resolving field {}", field.str());
 	if (!field.isStatic()) {
 		throw VmException("sget_object: Cannot use sget_object on a non-static field");
 	}
@@ -2074,7 +2290,7 @@ void Interpreter::sget_boolean(const uint8_t* operand_) {
 	if (!clazz.isStaticInitialized()) {
 		executeClinit(clazz);
 	}
-	bool value = field.getIntValue() != 0;
+	bool value = static_cast<uint8_t>(field.getIntValue()) != 0;
 	frame.setIntRegister(dest, value);
 	frame.pc() += 3;
 }
@@ -2110,7 +2326,7 @@ void Interpreter::sget_char(const uint8_t* operand_) {
 
 	const auto& field = classloader.resolveField(frame.getDexIdx(), fieldIndex);
 	if (!field.isStatic()) {
-		throw VmException("sget_wide: Cannot use sget on a non-static field");
+		throw VmException("sget_char: Cannot use sget on a non-static field");
 	}
 	if (field.getType() != "C") {
 		throw VmException("sget_char: Field {} type mismatch, expected char but got {}", field.getName(), field.getType());
@@ -2209,14 +2425,7 @@ void Interpreter::sput_object(const uint8_t* operand_) {
 	}
 	// set result of the sput-object
 	auto value = frame.getObjRegister(src);
-	// @todo : this is a hack to handle setting null to an object field. Need to properly handle this case.
-	if (value->isNumberObject() && (value->getValue() == 0)) {
-		auto& fieldclass = classloader.getOrLoad(field.getFieldTypeClassname());
-		auto obj = Object::make(fieldclass);
-		field.setObjectValue(obj);
-	} else {
-		field.setObjectValue(value);
-	}
+	field.setObjectValue(value);
 
 	frame.pc() += 3;
 }
@@ -2235,7 +2444,7 @@ void Interpreter::sput_boolean(const uint8_t* operand_) {
 		throw VmException("sput_boolean: Field {} type mismatch, expected boolean but got {}", field.getName(), field.getType());
 	}
 
-	bool value = frame.getIntRegister(src) != 0;
+	bool value = static_cast<uint8_t>(frame.getIntRegister(src)) != 0;
 	logger.fdebug("sput_boolean {}.{}={}", field.getClass().getFullname(), field.getName(), value);
 	field.setIntValue(value);
 	frame.pc() += 3;
@@ -2309,7 +2518,9 @@ void Interpreter::invoke_virtual(const uint8_t* operand_) {
 	auto args = getInvokeMethodArgs(operand_);
 	auto this_ptr = args[0];
 	if (this_ptr->isNull()) {
-		throw NullPointerException("invoke-virtual on null object");
+		const auto& caller = frame.getMethod();
+		throw NullPointerException(
+		    fmt::format("invoke-virtual on null object in {}.{}{}", caller.getClass().getFullname(), caller.getName(), caller.getSignature()));
 	}
 	if (!this_ptr->isClass()) {
 		throw VmException("invoke-virtual: this pointer is not an ObjectClass, got {}", this_ptr->toString());
@@ -2393,6 +2604,10 @@ void Interpreter::invoke_super(const uint8_t* operand_) {
 	while (true) {
 		try {
 			vmethod = &instance->getMethod(methodname, signature);
+			if (!vmethod->isVirtual()) {
+				// throw exception here to go up the superclass chain
+				throw VmException();
+			}
 			break;  // Method found, exit loop
 		} catch (std::exception& e) {
 			logger.fdebug("invoke-supper: method {}->{}{} not found, trying superclass", classname, methodname, signature);
@@ -2414,7 +2629,7 @@ void Interpreter::invoke_super(const uint8_t* operand_) {
 	if (vmethod->isNative()) {
 		executeNativeMethod(*vmethod, args);
 	} else {
-		if (vmethod->getBytecode() == nullptr) {
+		if (!vmethod->hasBytecode()) {
 			vmethod->execute(frame, args);
 		} else {
 			auto& newframe = _rt.newFrame(*vmethod);
@@ -2445,10 +2660,17 @@ void Interpreter::invoke_direct(const uint8_t* operand_) {
 	} else {
 		trace.logCall("invoke-direct", method.getClass().getFullname(), method.getName(), method.getSignature(), args, method.isStatic());
 	}
+
+	uint32_t thisRegIdx = operand_[3] & 0x0F;
+	if (tryRedirectToStringFactory(method, args, thisRegIdx)) {
+		frame.pc() += 5;
+		return;
+	}
+
 	if (method.isNative()) {
 		executeNativeMethod(method, args);
 	} else {
-		if (method.getBytecode() == nullptr) {
+		if (!method.hasBytecode()) {
 			method.execute(frame, args);
 		} else {
 			auto& newframe = _rt.newFrame(method);
@@ -2490,25 +2712,11 @@ void Interpreter::invoke_interface(const uint8_t* operand_) {
 
 	logger.fdebug("invoke-interface {}->{}{} for class {}", ifclassname, methodname, signature, instance->getFullname());
 
-	Method* vmethod = nullptr;
-	Class* current = instance;
-	while (current) {
-		try {
-			vmethod = &current->getMethod(methodname, signature);
-			break;  // Method found, exit loop
-		} catch (...) {
-			// not found in this class
-			if (current->hasSuperClass()) {
-				current = &classloader.getOrLoad(current->getSuperClassname());
-				if (!current->isStaticInitialized()) {
-					executeClinit(*current);
-				}
-			} else {
-				current = nullptr;
-			}
-		}
-	}
+	Method* vmethod = resolveInterfaceMethod(*instance, ifclassname, methodname, signature);
 	if (vmethod) {
+		if (vmethod->isStatic()) {
+			throw VmException("invoke-interface: method {}->{}{} is static", ifclassname, methodname, signature);
+		}
 		if (!vmethod->isVirtual()) {
 			logger.ferror("invoke-interface: {}->{}{} not virtual", ifclassname, methodname, signature);
 		}
@@ -2545,7 +2753,9 @@ void Interpreter::invoke_virtual_range(const uint8_t* operand_) {
 
 	auto this_ptr = args[0];
 	if (this_ptr->isNull()) {
-		throw NullPointerException("invoke-virtual/range on null object");
+		const auto& caller = frame.getMethod();
+		throw NullPointerException(
+		    fmt::format("invoke-virtual/range on null object in {}.{}{}", caller.getClass().getFullname(), caller.getName(), caller.getSignature()));
 	}
 	if (!this_ptr->isClass()) {
 		throw VmException("invoke-virtual/range: this pointer is not an ObjectClass, got {}", this_ptr->toString());
@@ -2643,7 +2853,7 @@ void Interpreter::invoke_direct_range(const uint8_t* operand_) {
 	if (method.isNative()) {
 		executeNativeMethod(method, args);
 	} else {
-		if (method.getBytecode() == nullptr) {
+		if (!method.hasBytecode()) {
 			method.execute(frame, args);
 		} else {
 			auto& newframe = _rt.newFrame(method);
@@ -2688,25 +2898,11 @@ void Interpreter::invoke_interface_range(const uint8_t* operand_) {
 	std::string ifclassname, methodname, signature;
 	classloader.findMethod(frame.getDexIdx(), methodRef, ifclassname, methodname, signature);
 
-	Method* vmethod = nullptr;
-	Class* current = instance;
-	while (current) {
-		try {
-			vmethod = &current->getMethod(methodname, signature);
-			break;  // Method found, exit loop
-		} catch (...) {
-			// not found in this class
-			if (current->hasSuperClass()) {
-				current = &classloader.getOrLoad(current->getSuperClassname());
-				if (!current->isStaticInitialized()) {
-					executeClinit(*current);
-				}
-			} else {
-				current = nullptr;
-			}
-		}
-	}
+	Method* vmethod = resolveInterfaceMethod(*instance, ifclassname, methodname, signature);
 	if (vmethod) {
+		if (vmethod->isStatic()) {
+			throw VmException("invoke-interface/range: method {}->{}{} is static", ifclassname, methodname, signature);
+		}
 		if (!vmethod->isVirtual()) {
 			logger.ferror("invoke-interface/range: {}->{}{} not virtual", ifclassname, methodname, signature);
 		}

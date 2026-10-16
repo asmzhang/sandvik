@@ -40,7 +40,6 @@ namespace sandvik {
 	 */
 	class Trace : public Singleton<Trace> {
 		public:
-			static Trace& getInstance();
 			/** Enable/disable traces
 			 * @param enable_ enable/disable
 			 */

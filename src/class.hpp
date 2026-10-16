@@ -24,13 +24,13 @@
 #include <string>
 #include <vector>
 
+#include "loader/dex/Annotation.hpp"
 #include "object.hpp"
 
-namespace LIEF::DEX {
-	class Class;
-}  // namespace LIEF::DEX
-
 namespace sandvik {
+	namespace dex {
+		class Class;
+	}  // namespace dex
 	class ClassLoader;
 	class Monitor;
 	class Method;
@@ -45,13 +45,16 @@ namespace sandvik {
 			 * @param fullname_ Full name of the class
 			 */
 			Class(ClassLoader& classloader_, const std::string& packagename_, const std::string& fullname_);
-			/** @brief Constructs a Class object from a LIEF DEX Class.
+			/** @brief Constructs a Class object from a parsed DEX class definition.
 			 * @param classloader_ Reference to the ClassLoader
 			 * @param dexIdx_ Index of the DEX file
-			 * @param class_ Reference to the LIEF DEX Class
+			 * @param class_ Reference to the parsed DEX class
 			 */
-			Class(ClassLoader& classloader_, const uint32_t dexIdx_, const LIEF::DEX::Class& class_);
+			Class(ClassLoader& classloader_, const uint32_t dexIdx_, const dex::Class& class_);
 			virtual ~Class();
+
+			/** @brief Gets the ClassLoader associated with the class. */
+			ClassLoader& getClassLoader() const;
 
 			/** @brief Prints debug information about the class. */
 			void debug() const;
@@ -75,6 +78,10 @@ namespace sandvik {
 			 * @return Full name of the class.
 			 */
 			std::string getFullname() const;
+			/** @brief Retrieves the full name of the class within the array.
+			 * @return The full name of the class.
+			 */
+			std::string getArrayType() const;
 
 			/** @brief Checks if a class method is overloaded.
 			 * @param name_ Name of the method.
@@ -118,16 +125,27 @@ namespace sandvik {
 			 * @param name_ Name of the field.
 			 * @return Reference to the Field object.
 			 */
-			Field& getField(const std::string& name_);
+			Field& getField(const std::string& name_) const;
 			/** @brief Gets a class field by index.
 			 * @param idx_ Index of the field.
 			 * @return Reference to the Field object.
 			 */
-			Field& getField(uint32_t idx_);
+			Field& getField(uint32_t idx_) const;
+			/** @brief Gets a field declared directly in this class (no superclass fallback).
+			 * @param name_ Name of the field.
+			 * @return Reference to the Field object.
+			 * @throws VmException if not found locally.
+			 */
+			Field& getOwnField(const std::string& name_) const;
 			/** @brief Gets the list of field names.
 			 * @return Vector of field names.
 			 */
 			std::vector<std::string> getFieldList() const;
+			/** @brief Gets the offset of a field by name.
+			 * @param name_ Name of the field.
+			 * @return Offset of the field.
+			 */
+			size_t getFieldOffset(const std::string& name_) const;
 
 			/** @brief Checks if a class implements an interface.
 			 * @param interface_ Name of the interface.
@@ -166,6 +184,10 @@ namespace sandvik {
 			 * @return true if the class is an interface, false otherwise.
 			 */
 			bool isInterface() const;
+			/** @brief Checks if the class is an array.
+			 * @return true if the class is an array, false otherwise.
+			 */
+			bool isArray() const;
 			/** @brief Checks if the class has a superclass.
 			 * @return true if the class has a superclass, false otherwise.
 			 */
@@ -178,6 +200,23 @@ namespace sandvik {
 			 * @return Superclass name.
 			 */
 			std::string getSuperClassname() const;
+			/** @brief Gets interfaces directly declared by the class or interface.
+			 * @return List of fully qualified interface names.
+			 */
+			const std::vector<std::string>& getInterfaces() const;
+
+			/** @brief This class's own annotations, if any (empty for classes not parsed from a DEX
+			 * file, e.g. ones synthesized via ClassBuilder).
+			 * @return This class's annotation set. */
+			const std::vector<dex::Annotation>& getAnnotations() const;
+			/** @brief Looks up an annotation on this class by its type name.
+			 * @param typeName_ Pretty (dotted) annotation type name, e.g. "dalvik.annotation.InnerClass".
+			 * @return Pointer to the annotation, or nullptr if this class has no such annotation. */
+			const dex::Annotation* getAnnotation(const std::string& typeName_) const;
+			/** @brief Checks whether this class carries a given annotation.
+			 * @param typeName_ Pretty (dotted) annotation type name.
+			 * @return true if present. */
+			bool hasAnnotation(const std::string& typeName_) const;
 
 			/** @brief Enters the monitor.
 			 *
@@ -214,9 +253,13 @@ namespace sandvik {
 			bool _hasSuperClass;
 			std::string _superClassname;
 
+			bool _isArray = false;
+			std::string _componentType;
+
 			std::map<std::string, std::unique_ptr<Method>, std::less<>> _methods;
 			std::map<std::string, std::unique_ptr<Field>, std::less<>> _fields;
 			std::vector<std::string> _interfaces;
+			std::vector<dex::Annotation> _annotations;
 			friend class ClassBuilder;
 
 			std::unique_ptr<Monitor> _monitor;

@@ -33,6 +33,13 @@ ClassBuilder::ClassBuilder(ClassLoader& classLoader, const std::string& packageN
 
 void ClassBuilder::setSuperClass(const std::string& superClassName_) {
 	_class->_superClassname = superClassName_;
+	_class->_hasSuperClass = true;
+}
+
+void ClassBuilder::addInterface(const std::string& ifClassName_) {
+	if (std::find(_class->_interfaces.begin(), _class->_interfaces.end(), ifClassName_) == _class->_interfaces.end()) {
+		_class->_interfaces.push_back(ifClassName_);
+	}
 }
 
 void ClassBuilder::setInterface() {
@@ -65,6 +72,14 @@ void ClassBuilder::addField(const std::string& name_, const std::string& type_, 
 	if (isStatic_ && value_) {
 		_class->_fields[name_]->setObjectValue(value_);
 	}
+}
+
+void ClassBuilder::setArray(bool isArray_) {
+	_class->_isArray = isArray_;
+}
+
+void ClassBuilder::setComponentType(const std::string& componentType_) {
+	_class->_componentType = componentType_;
 }
 
 void ClassBuilder::finalize() {
