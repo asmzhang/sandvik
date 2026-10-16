@@ -589,7 +589,7 @@ if(SANDVIK_TESTS)
     set(_BRIDGE_DEX_CLASSES "${CMAKE_BINARY_DIR}/bridge-dex-classes")
     set(_BRIDGE_CLASSES "${CMAKE_BINARY_DIR}/bridge-classes")
     add_custom_command(
-        OUTPUT "${_BRIDGE_DEX}" "${_BRIDGE_CLASSES}/org/sandvik/BridgeTest.class"
+        OUTPUT "${_BRIDGE_DEX}" "${_BRIDGE_CLASSES}/org/sandvik/BridgeTest.class" "${_BRIDGE_CLASSES}/org/sandvik/BridgeObjects.class"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${_BRIDGE_DEX_CLASSES}" "${_BRIDGE_CLASSES}"
         COMMAND ${Java_JAVAC_EXECUTABLE} --release 8 -nowarn -d "${_BRIDGE_DEX_CLASSES}"
                 "${_BRIDGE_DEX_DIR}/BridgeHello.java"
@@ -598,14 +598,21 @@ if(SANDVIK_TESTS)
         COMMAND ${Java_JAVAC_EXECUTABLE} -nowarn -d "${_BRIDGE_CLASSES}"
                 "${CMAKE_SOURCE_DIR}/tests/bridge/org/sandvik/Native.java"
                 "${CMAKE_SOURCE_DIR}/tests/bridge/org/sandvik/BridgeTest.java"
+                "${CMAKE_SOURCE_DIR}/tests/bridge/org/sandvik/BridgeObjects.java"
         DEPENDS "${_BRIDGE_DEX_DIR}/BridgeHello.java"
                 "${CMAKE_SOURCE_DIR}/tests/bridge/org/sandvik/Native.java"
                 "${CMAKE_SOURCE_DIR}/tests/bridge/org/sandvik/BridgeTest.java"
+                "${CMAKE_SOURCE_DIR}/tests/bridge/org/sandvik/BridgeObjects.java"
                 sandvik
         COMMENT "Compiling the sandvik/host-JVM bridge acceptance test")
-    add_custom_target(bridge_classes ALL DEPENDS "${_BRIDGE_CLASSES}/org/sandvik/BridgeTest.class")
+    add_custom_target(bridge_classes ALL DEPENDS "${_BRIDGE_CLASSES}/org/sandvik/BridgeTest.class"
+                                            "${_BRIDGE_CLASSES}/org/sandvik/BridgeObjects.class")
     add_test(NAME bridge_jvm
              COMMAND ${Java_JAVA_EXECUTABLE} --enable-native-access=ALL-UNNAMED
                      "-Dsandvik.library=$<TARGET_FILE:sandvik>"
                      -cp "${_BRIDGE_CLASSES}" org.sandvik.BridgeTest "${CMAKE_SOURCE_DIR}")
+    add_test(NAME bridge_objects
+             COMMAND ${Java_JAVA_EXECUTABLE} --enable-native-access=ALL-UNNAMED
+                     "-Dsandvik.library=$<TARGET_FILE:sandvik>"
+                     -cp "${_BRIDGE_CLASSES}" org.sandvik.BridgeObjects "${CMAKE_SOURCE_DIR}")
 endif()

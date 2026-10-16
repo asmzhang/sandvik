@@ -155,6 +155,20 @@ namespace sandvik {
 			/** Resume all threads (use for garbage collection) */
 			void resume();
 
+			/** Pin an object so the garbage collector keeps it alive.
+			 *
+			 * Objects are owned by the GC and reached through ObjectRef (a raw
+			 * pointer), so anything a native host keeps outside the VM is invisible
+			 * to the marker: without a root the object is swept and the host is left
+			 * with a dangling pointer. Native handles (the C API in
+			 * src/api/sandvik_c.cpp, and later the JNI bridge) pin every object they
+			 * hand out and unpin it when the handle is released.
+			 * @param obj_ object to keep alive; nullptr is ignored
+			 */
+			void addRoot(Object* obj_);
+			/** Unpin an object previously pinned with addRoot(); nullptr is ignored. */
+			void removeRoot(Object* obj_);
+
 		protected:
 			/** Run main method of given class with given arguments
 			 * @param clazz_ Class to run
@@ -177,6 +191,11 @@ namespace sandvik {
 			std::unique_ptr<NativeInterface> _jnienv;
 			std::map<std::string, std::string, std::less<>> _properties;
 			std::atomic<bool> _isRunning{false};
+
+			/** objects pinned by native hosts; visited as GC roots */
+			std::vector<Object*> _roots;
+			/** guards _roots: the GC thread marks while a host may pin/unpin */
+			mutable std::mutex _rootsMutex;
 
 			mutable std::mutex _mutex;
 	};

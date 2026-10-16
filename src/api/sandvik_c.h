@@ -46,9 +46,11 @@
  *   - "l:<long>"  long
  *   - "d:<x>"     double
  *   - "n:"        null
- * Only java.lang.String arguments and int/long/double/void returns are marshalled
- * today: any other object crosses the boundary as an opaque reference (kind
- * SV_KIND_OBJECT with its class descriptor).
+ * Objects that are not strings cross the boundary as sv_handle references: resolve
+ * their class with sv_vm_resolve_class(), create strings with sv_vm_new_string(),
+ * pass handles as sv_arg with SV_ARG_HANDLE and read them back from
+ * sv_value.handle. Handles are stable, so an object that leaves the VM and comes
+ * back keeps its identity.
  */
 
 #ifndef SANDVIK_EMBED_API_H
@@ -82,7 +84,33 @@ typedef struct sv_value {
 	double double_value;   /**< SV_KIND_DOUBLE */
 	char* string_value;    /**< SV_KIND_STRING, malloc'ed UTF-8, may be NULL */
 	char* class_name;      /**< SV_KIND_OBJECT class descriptor, malloc'ed, may be NULL */
+	int64_t handle;        /**< SV_KIND_STRING / SV_KIND_OBJECT: handle of that object (0 when none) */
 } sv_value;
+
+/** @brief A reference to an object or a class living inside the VM.
+ *
+ * 0 is the null handle and is accepted wherever a handle is expected. Handles are
+ * stable: while a handle is alive, one VM object always maps to one handle, so an
+ * object that crosses the boundary and comes back keeps its identity (this is what
+ * a host JNI bridge has to preserve). A live handle also **pins** its object: the
+ * VM's garbage collector cannot see raw ObjectRef values held outside the VM, so
+ * every handle is registered as a root and sv_vm_release_handle() drops that root
+ * (which lets the collector reclaim the object once nothing else references it).
+ */
+typedef int64_t sv_handle;
+
+/** @brief Kind of an sv_arg. */
+typedef enum sv_arg_kind {
+	SV_ARG_TOKEN = 0, /**< typed token in sv_arg.token */
+	SV_ARG_HANDLE = 1 /**< VM handle in sv_arg.handle */
+} sv_arg_kind;
+
+/** @brief One argument of sv_vm_call_static_handle(). */
+typedef struct sv_arg {
+	int32_t kind;      /**< one of sv_arg_kind */
+	const char* token; /**< SV_ARG_TOKEN: "s:text", "i:42", "l:42", "d:1.5", "n:" */
+	sv_handle handle;  /**< SV_ARG_HANDLE: handle from sv_vm_new_string()/sv_vm_call_static(); 0 passes null */
+} sv_arg;
 
 /** @brief Create a VM instance. @return handle, or NULL when it cannot be created. */
 sv_vm* sv_vm_create(void);
@@ -134,6 +162,78 @@ const char* sv_vm_get_property(sv_vm* vm, const char* name);
  */
 int32_t sv_vm_call_static(sv_vm* vm_, const char* class_name_, const char* method_, const char* signature_,
                           const char* const* args_, int32_t argc_, sv_value* out_);
+
+/** @brief Resolve a class by name (dotted or slashed) without calling it. @return class handle, or 0 on failure. */
+sv_handle sv_vm_resolve_class(sv_vm* vm_, const char* class_name_);
+
+/** @brief Create a java.lang.String inside the VM. @return object handle, or 0 on failure. */
+sv_handle sv_vm_new_string(sv_vm* vm_, const char* utf8_);
+
+/**
+ * @brief Call a static method of a class handle, mixing tokens and VM handles.
+ * @param class_ class handle from sv_vm_resolve_class() (an object handle denoting a Class also works)
+ * @param out_ filled with the return value; an object return also carries its handle in out_->handle
+ * @return 0 on success, negative on failure (see sv_vm_last_error)
+ */
+int32_t sv_vm_call_static_handle(sv_vm* vm_, sv_handle class_, const char* method_, const char* signature_,
+                                 const sv_arg* args_, int32_t argc_, sv_value* out_);
+
+/** @brief Class name of a handle (dotted for classes/objects), or NULL. Owned by the VM. */
+const char* sv_vm_object_class(sv_vm* vm_, sv_handle handle_);
+
+/** @brief Text of a string handle, the toString() of any other object, or NULL. Owned by the VM. */
+const char* sv_vm_object_string(sv_vm* vm_, sv_handle handle_);
+
+/** @brief 1 when the handle denotes a java.lang.String. */
+int32_t sv_vm_object_is_string(sv_vm* vm_, sv_handle handle_);
+
+/** @brief 1 for the null handle or for a null object. */
+int32_t sv_vm_object_is_null(sv_vm* vm_, sv_handle handle_);
+
+/** @brief 1 when the handle denotes a Class object (or a resolved class). */
+int32_t sv_vm_object_is_class(sv_vm* vm_, sv_handle handle_);
+
+/** @brief 1 when the handle denotes an array. */
+int32_t sv_vm_object_is_array(sv_vm* vm_, sv_handle handle_);
+
+/** @brief Length of an array handle, or -1 when it is not an array. */
+int32_t sv_vm_object_array_length(sv_vm* vm_, sv_handle handle_);
+
+/** @brief Element of a one dimensional array handle as a handle, or 0. */
+sv_handle sv_vm_object_element(sv_vm* vm_, sv_handle handle_, int32_t index_);
+
+/** @brief Number of live handles (diagnostics: an identity preserving bridge keeps it flat). */
+int32_t sv_vm_handle_count(sv_vm* vm_);
+
+/** @brief Drop a handle and the GC root it holds. */
+void sv_vm_release_handle(sv_vm* vm_, sv_handle handle_);
+
+/** @brief Start the collector thread (idempotent).
+ *
+ * The collector thread is already started when the VM is constructed (its
+ * constructor calls GC::manageVm, which runs the thread on the first VM), so this
+ * is an explicit guarantee for hosts that want to be certain before asking for a
+ * cycle rather than a switch that turns collection on.
+ * @return 0 on success, negative on failure
+ */
+int32_t sv_gc_start(void);
+
+/** @brief Ask the running collector for one cycle (asynchronous). @return 0, or negative on failure. */
+int32_t sv_gc_request_collect(void);
+
+/** @brief Number of collection cycles performed so far. */
+uint64_t sv_gc_cycles(void);
+
+/** @brief Number of objects currently owned by the collector. */
+uint64_t sv_gc_tracked_count(void);
+
+/** @brief Diagnostics: allocate a String that nothing references.
+ *
+ * Gives the next collection a provably unreachable object to sweep, which lets a
+ * test show that a collection really happened and that rooted handles survived it.
+ * @return 0 on success, negative on failure
+ */
+int32_t sv_gc_probe_unrooted_string(sv_vm* vm_, const char* utf8_);
 
 /** @brief Release the memory owned by a sv_value (safe to call twice). */
 void sv_value_dispose(sv_value* value_);

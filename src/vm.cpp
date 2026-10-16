@@ -18,6 +18,8 @@
 
 #include "vm.hpp"
 
+#include <algorithm>
+
 #include "jni/jni.h"
 
 #include "array.hpp"
@@ -305,10 +307,36 @@ void Vm::setProperty(const std::string& name_, const std::string& value_) {
 }
 
 void Vm::visitReferences(const std::function<void(Object*)>& visitor_) const {
+	{
+		std::lock_guard<std::mutex> lock(_rootsMutex);
+		for (Object* root : _roots) {
+			if (root != nullptr) {
+				visitor_(root);
+			}
+		}
+	}
 	_classloader->visitReferences(visitor_);
 	for (const auto& thread : _threads) {
 		thread->visitReferences(visitor_);
 	}
+}
+
+void Vm::addRoot(Object* obj_) {
+	if (obj_ == nullptr) {
+		return;
+	}
+	std::lock_guard<std::mutex> lock(_rootsMutex);
+	if (std::find(_roots.begin(), _roots.end(), obj_) == _roots.end()) {
+		_roots.push_back(obj_);
+	}
+}
+
+void Vm::removeRoot(Object* obj_) {
+	if (obj_ == nullptr) {
+		return;
+	}
+	std::lock_guard<std::mutex> lock(_rootsMutex);
+	_roots.erase(std::remove(_roots.begin(), _roots.end(), obj_), _roots.end());
 }
 
 void Vm::suspend() {

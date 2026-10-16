@@ -15,6 +15,7 @@
 2. **两条腿在本机都站得住**（集成的地基是实的）：sandvik 9 套件 88 用例全绿；unidbg 打两行补丁即编成，能加载我们目标 APK 的 arm64 壳 .so。
 3. **集成的瓶颈不是 JNI 函数数量，而是对象句柄的双向映射与线程模型**（§3.1、§4）。谁把 `jobject`/`JNIEnv*` 当成"自己人"，决定了桥必须放在哪一层。
 4. **建议**：当前项目走**路线 A（并行互补，零改动）**；unidbg 只做窄用法——按导出符号调用壳 .so 的**单个函数**（不要碰 `JNI_OnLoad`，实测 90 s 不返回，见 §7）。**只有出现"native 必须回调 Java"的刚需时**才启动路线 B，并按 §8 的最小切片做。
+5. **更新（§14）：M3 已跑通。** "native 必须回调 Java" 这条链在本机已经实测通过——unidbg 里跑 ARM64 native 方法，native 回调 Java 静态方法，Java 由 sandvik 解释执行，返回值经 native 帧回到 unidbg 侧（`run_eval.ps1` 一条命令可复现）。§0.4 的条件句因此从"设想"变成"已验证可做"；但**当前 APK 项目的建议不变**（仍走路线 A，见 §10）。
 
 ---
 
@@ -315,3 +316,154 @@ final void checkVersion(int version) {
 ### 11.5 许可
 
 sandvik GPL-3.0 × unidbg Apache-2.0：**同一个发行物整体按 GPL-3.0**（Apache-2.0 → GPL-3.0 单向兼容）。若新项目只做"外部进程 + 窄桥"（两边不链接），可回避合并问题；做了 M1/M3 的链接与同发行，就按 GPL-3.0 走。
+
+## 12 进展：M1 与 M2 已跑通（实测，非设想）
+
+写 §11 时 M1/M2 还是方案；本节记录它们**已经实现并通过验收**的事实，供后续 M3 判断起点。
+
+### 12.1 M1 sandvik 库化（已完成）
+
+- 产物：`sandvik\build\libsandvik.dll`（3.4 MB）、C API `sandvik\src\api\sandvik_c.h`、JNI 入口 `sandvik\src\api\sandvik_jni.cpp`、Java 侧 `sandvik\tests\bridge\org\sandvik\Native.java`。
+- 验收：`org.sandvik.BridgeTest` 从 Java 侧 `loadDex` → 调用 dex 里的静态方法 → 拿回返回值；`ctest` 10/10 通过（含新增 `bridge_jvm`）。
+
+### 12.2 M2 桥与句柄表（已完成）
+
+- sandvik 侧句柄层：`sv_vm_resolve_class` / `sv_vm_new_string` / `sv_vm_call_static_handle` / `sv_vm_object_class_name` / `sv_vm_object_as_string` / `sv_vm_object_is_*` / `sv_vm_object_array_length` / `sv_vm_object_element` / `sv_vm_handle_count` / `sv_vm_release_handle`；句柄表是**根**：对象句柄在 `internRef` 里 `Vm::addRoot`（`sandvik\src\api\sandvik_c.cpp:93`），`sv_vm_release_handle` 里 `removeRoot`（同文件 650）——理由见 §13 的 A1。**返回约定：0 = 成功**（`sv_vm_resolve_class` 例外，返回句柄、0 = 失败）。
+- unidbg 侧桥：`unidbg_sandvik_eval\src\com\github\unidbg\linux\android\dvm\{SandvikBridge,SandvikClass,SandvikObject}.java`。`SandvikBridge extends BaseVM`（必须与 `BaseVM` 同包，因为它的构造器 `BaseVM(AndroidEmulator, File)` 是包私有），只实现抽象方法 `loadLibraryData` / `getJavaVM` / `getJNIEnv`，并重写 `createClass` 作为 `resolveClass` 的接入点；`SandvikClass extends DvmClass`、`SandvikObject extends DvmObject`，两者都带一个 sandvik 句柄。
+- 验收：`org.sandvik.SandvikBridgeTest`（classpath = unidbg 两个 jar + `sandvik\build\bridge-classes` + 本目录 `out`）四组断言全绿、exit 0：
+  - `[1] unidbg resolveClass -> SandvikClass(BridgeHello, handle=1)`（`findClass` 返回同一对象）
+  - `[2] newSandvikString -> SandvikObject(java.lang.String, handle=3, value=world), unidbg hash=159259014`
+  - `[3] sandvik executed BridgeHello.hello -> "hello, world", add -> 42`
+  - `[4] echo round trip -> sandvik handle 3, unidbg hash=2034688500`（对象进 sandvik 再回来，句柄不变）
+
+### 12.3 M2 期间发现的两个真实坑（写进代码注释，避免复发）
+
+1. **sandvik 的 `Array::isClass()` 返回 `true`**（`sandvik\src\array.cpp:76-78`）。若直接用 `isClass()` 判断，数组会被登记成"类句柄"，`objectIsArray` / `objectElement` 立刻失效（症状：`isArray=0 length=-1 isClass=1`）。修法：`is_class = obj->isClass() && !obj->isArray()`，已在 `sandvik\src\api\sandvik_c.cpp` 三处（`classFromHandle`、`marshalReturn`、`sv_vm_object_element`）落实。
+2. **`Class::getName()` 是简单名，`getFullname()` 才是点号全名**（`sandvik\src\class.cpp:45/55/57/155/159`）。返回给 unidbg 的 `className` 必须用 `getFullname()`。另：dex 里 `value.getClass().getName()` 在 sandvik 内会报 `invoke-virtual: call method java.lang.String->getName()Ljava/lang/String; not found`，验收 dex 因此不依赖它。
+
+### 12.4 结论与下一步
+
+- §11 的判断（宿主是 JVM、sandvik 以 JNI 库形态被调用、代码归新项目）在 M1/M2 上**已被实测支持**：桥只需要 3 个类，没有改动 sandvik 的执行核心。
+- **M3 native 执行器：已跑通（见 §14）**。验收标准（一个 arm64 native 方法成功回调一个 Java 方法并拿到结果）在 `org.sandvik.SandvikNativeTest` 上首跑即过；做法不是"让 sandvik 去执行 native"，而是反过来——**unidbg 自己当 VM，把 Java 侧交给 sandvik**：`vm.setDvmClassFactory(bridge)` + `vm.setJni(new SandvikJni(bridge))`。
+- §14.5 列了这次没做的（实例方法 / 构造 / 数组 / `RegisterNatives`）。
+
+## 13 桥的审计（读源码 + A/B 实测；问题已修）
+
+M2 跑通不等于逻辑自洽。本节是对 M2 的审计：先读两边的实现（unidbg 的 `dvm/BaseVM`、`DvmObject`、`DvmClass`；sandvik 的 `gc.cpp`、`vm.cpp`、`object.cpp`），再对每个可疑点做可观测的 A/B 实验。**A1–A6 已修并复验；A7–A10 是设计约束/更正，记录在案。**
+
+### A1 句柄悬空（严重 → 已修，有实测证据）
+
+- **机制**：句柄表 `sv_vm::refs_by_id` 存的是裸 `ObjectRef`。sandvik 的 GC 标记阶段只看三个来源——root set、class loader、线程帧（`sandvik\src\gc.cpp:157-159` → `vm->visitReferences(mark)`；`sandvik\src\vm.cpp:309-322` 只访问 `_roots` / `_classloader` / `_threads`）。也就是说：**只被句柄引用的对象不在任何根上**，一次回收就会把它扫掉，句柄随之变野指针。
+- **修法**：句柄即根。`internRef` 对非 Class 句柄 `Vm::addRoot`（`sandvik\src\api\sandvik_c.cpp:93`），`sv_vm_release_handle` 对称 `removeRoot`（同文件 650）；新增 `Vm::addRoot/removeRoot`（`sandvik\src\vm.hpp:168/170`、`vm.cpp:324/334`），`_roots` 在 `visitReferences` 里最先被访问（`vm.cpp:310-317`）。
+- **A/B 实测**（同一次回收里对照，`SandvikBridgeTest` 第 [5] 组）：新加诊断入口 `sv_gc_probe_unrooted_string` 造一个"谁都不引用"的 String（走 `Object::make(ClassLoader&, const std::string&)`，`object.cpp:338-344`，**不进 StringPool**，所以 `StringPool::markAll()` 不会误标它）；`gcRequestCollect()` 后：
+  - 未持句柄的探针 → 被扫（tracked **469 → 47**，`gcCycles` 0 → 1）；
+  - 持句柄的 `world` → `objectIsString(handle) == 1`、`wrapHandle(handle)` 仍返回**同一个** wrapper、静态调用仍返回 `hello, after-gc`；
+  - 句柄数不变（5）。
+  两边对象由同一条 `Object::make` 路径产生，唯一差别就是有没有 `addRoot` ⇒ 这个修复是**承重**的，不是修饰。
+- 新增的 GC 入口（`sandvik\src\api\sandvik_c.h` + `sandvik_jni.cpp` + `tests\bridge\org\sandvik\Native.java`）：`sv_gc_start` / `sv_gc_request_collect` / `sv_gc_cycles` / `sv_gc_tracked_count` / `sv_gc_probe_unrooted_string`。前四个是宿主可观测的旋钮与仪表，最后一个是诊断专用（造一个必然可回收的对象，用来证明"回收真的发生了"）。
+
+### A2 残留字段导致编译失败（中 → 已修）
+
+审计把 `refs_is_class` 表改成 `refs_kind`（三态：对象 / 类 / Class 对象）时，`sandvik_c.cpp:218`（`makeArg`）仍读旧字段 → `error: no member named 'refs_is_class' in 'sv_vm'`。已改为 `refs_kind` + `KIND_CLASS`。教训：改了结构体字段要 `grep` 全仓旧名，别信"我只改了几处"。
+
+### A3 双重包装导致身份分裂（中 → 已修）
+
+- **机制**：unidbg 的对象身份是 **Java 实例身份**（`DvmObject` 没有覆写 `hashCode/equals`，只有 `Object` 的默认实现），而桥原来每次 `wrapHandle` 都 `new`。于是同一个 sandvik 对象可以被包成两个 wrapper、拿到两个不同的 unidbg hash——"对象往返不丢身份"这条 M2 验收标准就只在"调用者自己记住实例"的前提下成立。
+- **修法**：`SandvikBridge` 增加规范化表 `objectsByHandle`，`wrapHandle` 命中即返回既有实例；并补 `sandvikHandleOf(int hash)` 反向查询（M3 的 env 需要"从 unidbg hash 找 sandvik 句柄"）。
+
+### A4 参数表长度不齐会静默越界（中 → 已修）
+
+`callStatic(clazz, method, signature, tokens, handles)` 若 `tokens.length != handles.length`，原来会把越界读数交给 sandvik。现在抛 `IllegalArgumentException`；`resolveSandvikClass` 与 `callStatic` 对 `handle == 0` 的类**直接抛错**，而不是把 0 当合法句柄传进去。
+
+### A5 生命周期（低 → 已修）
+
+构造时若某个 runtime jar 加载失败，原实现会漏掉 `Native.destroy`（VM 泄漏）——现在失败即销毁；`close()` 改为幂等（可重入），并清空规范化表。
+
+### A6 M3 的桩不该返回 null（低 → 已修）
+
+`getJavaVM()` / `getJNIEnv()` 原来返回 null，调用方会拿到一个"看起来能用、用起来崩"的指针。现在抛 `UnsupportedOperationException`（`loadLibraryData` 返回 null 是**正确**的：那是 unidbg 对"这个 APK 没有这个库"的约定答复）。
+
+### A7 局部引用不会自动释放句柄（设计约束，未修）
+
+unidbg 的 `deleteLocalRefs()` 无法回调桥去释放 sandvik 句柄（`DvmObject.onDeleteRef()` 是包私有 final）。所以**句柄的生命周期由宿主显式管**：`releaseSandvikHandle(handle)` 或 `close()`。桥的类注释已写明，避免后来者以为"unidbg 会自动帮我释放"。
+
+### A8 GC 不扫 C++ 栈（设计约束，未修）
+
+`sandvik\src\gc.cpp:138-141` 自带 TODO："scan thread's local JNI handles table / global JNI handles" 尚未实现。含义：**桥之外的裸 `ObjectRef` 一律不安全**，跨边界对象必须走句柄（而现在句柄就是根）。这也解释了 A1 为什么必须先修：句柄是这套 GC 下唯一可靠的跨边界引用。
+
+### A9 更正：GC 线程其实早就启动了（信息）
+
+早先（§12 期间）以为"VM 从不启动 GC 线程"。错：`Vm` 构造器就调 `GC::manageVm(this)`（`sandvik\src\vm.cpp:46`），后者在第一个 VM 时 `run()` 起线程（`sandvik\src\gc.cpp:85-87`）；默认 `_limit = 50_000_000`，所以实际回收只由 `requestCollect()` 触发。`sv_gc_start()` 因此是**幂等保证**（保留，但注释已改成事实），不是开关。
+
+### A10 更正：Hash 不会碰撞覆盖（信息）
+
+一度担心两个 sandvik 对象在 unidbg 对象表里哈希相撞。查证：`DvmObject` 未覆写 `hashCode/equals` ⇒ 身份即实例，配 A3 的规范化后不会互相覆盖（验收里 `hash` 与 wrapper 一一对应）。
+
+### 审计后的复验（全部通过）
+
+- sandvik 全量测试：`ctest --timeout 120` → **11/11 通过**（18.8 s，含 `bridge_jvm`、`bridge_objects`）。
+- 桥验收 `org.sandvik.SandvikBridgeTest`：**21 项断言全绿**，exit 0，其中第 [5][6] 组是本次审计新增的 GC 断言（回收真的发生 / 根上的对象活下来 / 句柄数不变 / 释放句柄后不打扰幸存者）。
+
+## 14 进展：M3 已跑通 —— ARM64 native 回调 Java，由 sandvik 执行（实测）
+
+**验收标准（§11.3 的 M3）已达成**：unidbg 里跑一个 ARM64 native 方法，该方法通过 JNI 回调 Java 静态方法，Java 由 sandvik 解释执行，返回值经 native 帧回到 unidbg 侧。
+
+### 14.1 接缝：`Hashable.checkJni`（M3 只需要这一处）
+
+- `unidbg-android/src/main/java/com/github/unidbg/linux/android/dvm/Hashable.java:5-11`：`checkJni(BaseVM vm, DvmClass dvmClass)` 返回 `dvmClass.getJni()`（非空时），否则 `vm.jni`；两者都空则抛 `IllegalStateException("Please vm.setJni(jni)")`。
+- `DvmMethod.java:54` 起，所有 `callXxxMethod` 都先走 `checkJni(vm, dvmClass)`。
+- 所以只要 `vm.setJni(new SandvikJni(bridge))`，unidbg 收到的每个 Java 调用都进我们的实现；`vm.setDvmClassFactory(bridge)` 则让 unidbg 解析出的每个类都是带 sandvik 句柄的 `SandvikClass`。
+
+宿主侧装配只有三行（`SandvikNativeTest.java`）：
+
+```java
+VM vm = emulator.createDalvikVM();   // unidbg 自己的 DalvikVM64：自带 JNI 表 + classMap + 引用表
+vm.setDvmClassFactory(bridge);       // FindClass -> SandvikClass（带 sandvik 句柄）
+vm.setJni(new SandvikJni(bridge));   // Java 调用 -> sandvik 执行
+```
+
+### 14.2 一次 `CallStaticObjectMethod` 的完整调用链
+
+1. native `env->FindClass("org/sandvik/Hello")` → `DalvikVM64._FindClass`（`DalvikVM64.java:56-83`）→ `resolveClass` → 工厂 → `SandvikClass`（含 sandvik 句柄）→ 返回其 `hashCode()` 当 jclass。
+2. `env->GetStaticMethodID(...)` → `_GetStaticMethodID`（`DalvikVM64.java:1777-1800`）→ `DvmClass.getStaticMethodID(name, args)`。
+3. `env->NewStringUTF("world")` → `_NewStringUTF`（`DalvikVM64.java:3036-3057`）→ `StringObject`。
+4. `env->CallStaticObjectMethod(clazz, mid, str)` → `_CallStaticObjectMethod`（`DalvikVM64.java:1802-1824`）→ `DvmMethod.callStaticObjectMethod` → **`checkJni` → `SandvikJni`** → sandvik C API（`resolveClass` / `newString` / `callStaticHandle`）→ `SandvikObject`（unidbg 身份 = sandvik 句柄的规范化包装，A3）。
+5. 返回值被 `addLocalObject` 收进 unidbg 引用表，native 拿到 jstring；native 原样返回，unidbg 侧再 `vm.getObject(...)` 取回 Java 字符串。
+
+### 14.3 本次新增/改动的文件
+
+| 文件 | 作用 |
+| --- | --- |
+| `unidbg_sandvik_eval\src\com\github\unidbg\linux\android\dvm\SandvikJni.java` | `extends AbstractJni`；覆写静态调用家族（`callStatic{Void,Boolean,Int,Long,Object}Method` 的 `DvmMethod` 与 `String` 两种签名），把 `DvmMethod.getSignature()` 解析成 sandvik 的类/方法/描述符，按描述符打包参数并校验返回值 |
+| `unidbg_sandvik_eval\src\org\sandvik\SandvikNativeTest.java` | M3 验收程序（stdout 置空 + 180 s 看门狗 + 三组断言） |
+| `unidbg_sandvik_eval\native\sandvik_bridge.c` | ARM64 测试库源码：`bridgeHello` / `bridgeAdd` / `bridgeEcho`（分别走 `CallStaticObjectMethod` / `CallStaticIntMethod` / 对象往返） |
+| `unidbg_sandvik_eval\native\libsandviktest.so` | 上者的 arm64-v8a 产物（5,936 B，NDK clang `-shared -fPIC -O1`） |
+| `sandvik\tests\java\bridge\org\sandvik\Hello.java` | 被回调的 Java 类（`hello` / `add` / `echo`） |
+| `sandvik\tests\java\bridge\org\sandvik\NativeBridge.java` | native 声明（`bridgeHello` / `bridgeAdd`） |
+| `sandvik\tests\java\bridge\classes.dex` | 上述类的 dex（1,616 B；**必须 `javac --release 11`**：JDK 25 产 major 69，d8 8.10 拒绝） |
+| `unidbg_sandvik_eval\run_eval.ps1` | 一条命令重建并跑 M2 + M3（`-Only m2|m3`；`-Rebuild` 会重编 dex 与 .so） |
+
+### 14.4 验收输出（首跑即过，exit 0）
+
+```
+  [ok] the ARM64 test library is loaded (LinuxModule{base=0x12000000, size=12288, name='libsandviktest.so'})
+  [ok] unidbg resolved the native class through sandvik (SandvikClass(org.sandvik.NativeBridge, handle=1))
+  [ok] native bridgeHello() -> "hello, world" (executed by sandvik)
+[1] CallStaticObjectMethod answered by sandvik -> "hello, world"
+  [ok] native bridgeAdd(40, 2) -> 42
+[2] CallStaticIntMethod answered by sandvik -> 42
+  [ok] native bridgeEcho("ping") -> "ping"
+[3] object round trip through native -> "ping"
+[ok] M3 native bridge acceptance passed
+```
+
+同一轮的 M2 回归：**21 项断言全绿**（`echo` 往返的 unidbg hash 与 `newSandvikString` 一致 = 159259014，A3 的规范化生效）。
+
+### 14.5 这次没做、下次会撞上的
+
+- **实例方法 / 构造 / 数组**：`SandvikJni` 目前只覆写静态调用家族。实例调用需要 sandvik C API 增 `sv_vm_call_handle`（按句柄调实例方法），数组需要 `jarray` 双向拷贝；`AbstractJni` 未覆写的方法仍然抛异常——这是有意的，遇到再补一个，不要预先全实现。
+- **`RegisterNatives`**：真实壳的 native 方法走它注册（§10 已记为 sandvik 侧的硬前提，`sandvik\src\jni.cpp:2638` 仍待修）。
+- **引用生命周期**：unidbg 的 `deleteLocalRefs()` 无法回调桥去释放句柄（A7），跨边界对象仍由宿主显式 `releaseSandvikHandle` / `close`。
+- **性能**：每次 Java 调用都是「unidbg 解释 native 帧 → JNI → sandvik 解释 Java」，两边都是解释器；这条链适合正确性验证与少量回调，不适合当高频热路径。
+- **两个真坑**：① 用 `& java ... 2>&1 | Where-Object` 时若 `$ErrorActionPreference = 'Stop'`，java 的 stderr 会被 PowerShell 包成终止性 `NativeCommandError`（脚本假失败）；`run_eval.ps1` 在调用前后临时放宽为 `Continue`。② 用 `&` 调用 `.ps1` 时它内部的 `exit` 会结束调用方 pwsh。
+

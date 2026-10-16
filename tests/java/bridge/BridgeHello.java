@@ -29,4 +29,14 @@ public class BridgeHello {
 	public static int add(int a, int b) {
 		return a + b;
 	}
+
+	/** Identity probe: the object that goes in has to be the object that comes out. */
+	public static Object echo(Object value) {
+		return value;
+	}
+
+	/** Array probe: element 0 is the argument, element 1 is null. */
+	public static Object[] wrap(Object value) {
+		return new Object[] { value, null };
+	}
 }

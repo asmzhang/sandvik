@@ -85,10 +85,69 @@ public final class Native {
 	 * @param method    method name
 	 * @param signature JNI signature, e.g. "(Ljava/lang/String;)Ljava/lang/String;"
 	 * @param args      typed tokens: "s:text", "i:42", "l:42", "d:1.5", "n:"
-	 * @return { Integer kind, String text, Long number, String className }
+	 * @return { Integer kind, String text, Long number, String className, Long handle }
 	 */
 	public static native Object[] callStatic(long handle, String className, String method, String signature, String[] args);
 
 	/** Last error message of the VM, or null. */
 	public static native String lastError(long handle);
+
+	/**
+	 * Resolve a class without calling it.
+	 *
+	 * @return class handle, or 0 when the class cannot be loaded
+	 */
+	public static native long resolveClass(long handle, String className);
+
+	/** Create a java.lang.String inside the VM. @return object handle, or 0 */
+	public static native long newString(long handle, String text);
+
+	/**
+	 * Call a static method of a class handle, mixing tokens and VM handles.
+	 *
+	 * @param tokens  typed tokens, one per argument
+	 * @param handles VM handles, one per argument; a non zero entry is used instead of the token
+	 * @return { Integer kind, String text, Long number, String className, Long handle }
+	 */
+	public static native Object[] callStaticHandle(long handle, long classHandle, String method, String signature, String[] tokens, long[] handles);
+
+	/** Class name of a handle (dotted), or null. */
+	public static native String objectClassName(long handle, long ref);
+
+	/** Text of a string handle (or toString() of any object), or null. */
+	public static native String objectAsString(long handle, long ref);
+
+	public static native int objectIsString(long handle, long ref);
+
+	public static native int objectIsNull(long handle, long ref);
+
+	public static native int objectIsClass(long handle, long ref);
+
+	public static native int objectIsArray(long handle, long ref);
+
+	public static native int objectArrayLength(long handle, long ref);
+
+	/** Element of a one dimensional array as a handle, or 0. */
+	public static native long objectElement(long handle, long ref, int index);
+
+	/** Number of live handles (diagnostics). */
+	public static native int handleCount(long handle);
+
+	/** Drop a handle and the GC root it holds. */
+	public static native void releaseHandle(long handle, long ref);
+
+	/** Start the collector thread (idempotent; the VM constructor already did it). */
+	public static native int gcStart();
+
+	/** Ask the running collector for one cycle (asynchronous). */
+	public static native int gcRequestCollect();
+
+	/** Number of collection cycles performed so far. */
+	public static native long gcCycles();
+
+	/** Number of objects currently owned by the collector. */
+	public static native long gcTrackedCount();
+
+	/** Diagnostics: allocate a String that nothing references (something to sweep). */
+	public static native int gcProbeUnrootedString(long handle, String text);
 }

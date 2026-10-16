@@ -52,7 +52,7 @@ namespace {
 		return out;
 	}
 
-	/** Build the Object[] { kind, text, number, className } returned to Java. */
+	/** Build the Object[] { kind, text, number, className, handle } returned to Java. */
 	jobjectArray makeResult(JNIEnv* env_, const sv_value& value_) {
 		jclass objectClass = env_->FindClass("java/lang/Object");
 		jclass integerClass = env_->FindClass("java/lang/Integer");
@@ -60,7 +60,7 @@ namespace {
 		if (objectClass == nullptr || integerClass == nullptr || longClass == nullptr) {
 			return nullptr;
 		}
-		jobjectArray result = env_->NewObjectArray(4, objectClass, nullptr);
+		jobjectArray result = env_->NewObjectArray(5, objectClass, nullptr);
 		if (result == nullptr) {
 			return nullptr;
 		}
@@ -89,6 +89,7 @@ namespace {
 			default:
 				break;
 		}
+		env_->SetObjectArrayElement(result, 4, env_->CallStaticObjectMethod(longClass, longValueOf, static_cast<jlong>(value_.handle)));
 		return result;
 	}
 }  // namespace
@@ -143,13 +144,7 @@ JNIEXPORT jstring JNICALL Java_org_sandvik_Native_getProperty(JNIEnv* env_, jcla
 JNIEXPORT jobjectArray JNICALL Java_org_sandvik_Native_callStatic(JNIEnv* env_, jclass, jlong handle_, jstring class_, jstring method_,
                                                                  jstring signature_, jobjectArray args_) {
 	sv_vm* vm = reinterpret_cast<sv_vm*>(handle_);
-	sv_value value;
-	value.kind = SV_KIND_NULL;
-	value.int_value = 0;
-	value.long_value = 0;
-	value.double_value = 0.;
-	value.string_value = nullptr;
-	value.class_name = nullptr;
+	sv_value value = {};  // zeroed: kind == SV_KIND_NULL, no handle
 
 	std::vector<std::string> tokens;
 	if (args_ != nullptr) {
@@ -182,6 +177,135 @@ JNIEXPORT jobjectArray JNICALL Java_org_sandvik_Native_callStatic(JNIEnv* env_, 
 JNIEXPORT jstring JNICALL Java_org_sandvik_Native_lastError(JNIEnv* env_, jclass, jlong handle_) {
 	const char* error = sv_vm_last_error(reinterpret_cast<sv_vm*>(handle_));
 	return error != nullptr ? env_->NewStringUTF(error) : nullptr;
+}
+
+JNIEXPORT jlong JNICALL Java_org_sandvik_Native_resolveClass(JNIEnv* env_, jclass, jlong handle_, jstring name_) {
+	const std::string name = toStdString(env_, name_);
+	return static_cast<jlong>(sv_vm_resolve_class(reinterpret_cast<sv_vm*>(handle_), name.c_str()));
+}
+
+JNIEXPORT jlong JNICALL Java_org_sandvik_Native_newString(JNIEnv* env_, jclass, jlong handle_, jstring text_) {
+	const std::string text = toStdString(env_, text_);
+	return static_cast<jlong>(sv_vm_new_string(reinterpret_cast<sv_vm*>(handle_), text.c_str()));
+}
+
+/**
+ * Same result shape as callStatic(), but the class is a handle and the arguments
+ * may be VM handles (handles[i] != 0 wins over the token in tokens[i]).
+ */
+JNIEXPORT jobjectArray JNICALL Java_org_sandvik_Native_callStaticHandle(JNIEnv* env_, jclass, jlong handle_, jlong class_,
+                                                                       jstring method_, jstring signature_, jobjectArray tokens_,
+                                                                       jlongArray handles_) {
+	sv_vm* vm = reinterpret_cast<sv_vm*>(handle_);
+	sv_value value = {};
+
+	std::vector<std::string> tokens;
+	if (tokens_ != nullptr) {
+		const jsize count = env_->GetArrayLength(tokens_);
+		tokens.reserve(static_cast<size_t>(count));
+		for (jsize i = 0; i < count; ++i) {
+			auto element = reinterpret_cast<jstring>(env_->GetObjectArrayElement(tokens_, i));
+			tokens.push_back(toStdString(env_, element));
+			if (element != nullptr) {
+				env_->DeleteLocalRef(element);
+			}
+		}
+	}
+	std::vector<jlong> handleValues;
+	if (handles_ != nullptr) {
+		const jsize count = env_->GetArrayLength(handles_);
+		handleValues.resize(static_cast<size_t>(count), 0);
+		if (count > 0) {
+			env_->GetLongArrayRegion(handles_, 0, count, handleValues.data());
+		}
+	}
+
+	std::vector<sv_arg> args;
+	args.reserve(tokens.size());
+	for (size_t i = 0; i < tokens.size(); ++i) {
+		sv_arg arg;
+		arg.token = nullptr;
+		arg.handle = 0;
+		arg.kind = SV_ARG_TOKEN;
+		if (i < handleValues.size() && handleValues[i] != 0) {
+			arg.kind = SV_ARG_HANDLE;
+			arg.handle = static_cast<sv_handle>(handleValues[i]);
+		} else {
+			arg.token = tokens[i].c_str();
+		}
+		args.push_back(arg);
+	}
+
+	const std::string method = toStdString(env_, method_);
+	const std::string signature = toStdString(env_, signature_);
+	sv_vm_call_static_handle(vm, static_cast<sv_handle>(class_), method.c_str(), signature.c_str(),
+	                         args.empty() ? nullptr : args.data(), static_cast<int32_t>(args.size()), &value);
+	jobjectArray result = makeResult(env_, value);
+	sv_value_dispose(&value);
+	return result;
+}
+
+JNIEXPORT jstring JNICALL Java_org_sandvik_Native_objectClassName(JNIEnv* env_, jclass, jlong handle_, jlong ref_) {
+	const char* name = sv_vm_object_class(reinterpret_cast<sv_vm*>(handle_), static_cast<sv_handle>(ref_));
+	return name != nullptr ? env_->NewStringUTF(name) : nullptr;
+}
+
+JNIEXPORT jstring JNICALL Java_org_sandvik_Native_objectAsString(JNIEnv* env_, jclass, jlong handle_, jlong ref_) {
+	const char* text = sv_vm_object_string(reinterpret_cast<sv_vm*>(handle_), static_cast<sv_handle>(ref_));
+	return text != nullptr ? env_->NewStringUTF(text) : nullptr;
+}
+
+JNIEXPORT jint JNICALL Java_org_sandvik_Native_objectIsString(JNIEnv* env_, jclass, jlong handle_, jlong ref_) {
+	return sv_vm_object_is_string(reinterpret_cast<sv_vm*>(handle_), static_cast<sv_handle>(ref_));
+}
+
+JNIEXPORT jint JNICALL Java_org_sandvik_Native_objectIsNull(JNIEnv* env_, jclass, jlong handle_, jlong ref_) {
+	return sv_vm_object_is_null(reinterpret_cast<sv_vm*>(handle_), static_cast<sv_handle>(ref_));
+}
+
+JNIEXPORT jint JNICALL Java_org_sandvik_Native_objectIsClass(JNIEnv* env_, jclass, jlong handle_, jlong ref_) {
+	return sv_vm_object_is_class(reinterpret_cast<sv_vm*>(handle_), static_cast<sv_handle>(ref_));
+}
+
+JNIEXPORT jint JNICALL Java_org_sandvik_Native_objectIsArray(JNIEnv* env_, jclass, jlong handle_, jlong ref_) {
+	return sv_vm_object_is_array(reinterpret_cast<sv_vm*>(handle_), static_cast<sv_handle>(ref_));
+}
+
+JNIEXPORT jint JNICALL Java_org_sandvik_Native_objectArrayLength(JNIEnv* env_, jclass, jlong handle_, jlong ref_) {
+	return sv_vm_object_array_length(reinterpret_cast<sv_vm*>(handle_), static_cast<sv_handle>(ref_));
+}
+
+JNIEXPORT jlong JNICALL Java_org_sandvik_Native_objectElement(JNIEnv* env_, jclass, jlong handle_, jlong ref_, jint index_) {
+	return static_cast<jlong>(sv_vm_object_element(reinterpret_cast<sv_vm*>(handle_), static_cast<sv_handle>(ref_), index_));
+}
+
+JNIEXPORT jint JNICALL Java_org_sandvik_Native_handleCount(JNIEnv* env_, jclass, jlong handle_) {
+	return sv_vm_handle_count(reinterpret_cast<sv_vm*>(handle_));
+}
+
+JNIEXPORT void JNICALL Java_org_sandvik_Native_releaseHandle(JNIEnv* env_, jclass, jlong handle_, jlong ref_) {
+	sv_vm_release_handle(reinterpret_cast<sv_vm*>(handle_), static_cast<sv_handle>(ref_));
+}
+
+JNIEXPORT jint JNICALL Java_org_sandvik_Native_gcStart(JNIEnv*, jclass) {
+	return sv_gc_start();
+}
+
+JNIEXPORT jint JNICALL Java_org_sandvik_Native_gcRequestCollect(JNIEnv*, jclass) {
+	return sv_gc_request_collect();
+}
+
+JNIEXPORT jlong JNICALL Java_org_sandvik_Native_gcCycles(JNIEnv*, jclass) {
+	return static_cast<jlong>(sv_gc_cycles());
+}
+
+JNIEXPORT jlong JNICALL Java_org_sandvik_Native_gcTrackedCount(JNIEnv*, jclass) {
+	return static_cast<jlong>(sv_gc_tracked_count());
+}
+
+JNIEXPORT jint JNICALL Java_org_sandvik_Native_gcProbeUnrootedString(JNIEnv* env_, jclass, jlong handle_, jstring text_) {
+	const std::string text = toStdString(env_, text_);
+	return sv_gc_probe_unrooted_string(reinterpret_cast<sv_vm*>(handle_), text.c_str());
 }
 
 }  // extern "C"
