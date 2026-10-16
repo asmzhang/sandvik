@@ -119,7 +119,7 @@ void Vm::loadLibrary(const std::string& libName_) {
 			// jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
 			auto jniOnLoad = reinterpret_cast<void (*)(JavaVM*, void*)>(JNI_onLoad);
 			logger.fdebug("Executing native function JNI_OnLoad@{:#x} ", (uintptr_t)jniOnLoad);
-			jniOnLoad(nullptr, nullptr);  // todo pass actual JavaVM
+			jniOnLoad(static_cast<JavaVM*>(getJNIEnv()->getJavaVm()), nullptr);
 		}
 		_sharedlibs.push_back(std::move(lib));
 	} else {
@@ -198,6 +198,50 @@ void Vm::run(Class& clazz_, const std::vector<std::string>& args_) {
 	mainThread.run(true);
 	_isRunning.store(false);
 	mainThread.join();
+}
+
+ObjectRef Vm::call(Method& method_, const std::vector<ObjectRef>& args_) {
+	JThread& thread = newThread("sandvik-call");
+
+	// The worker thread needs a ThreadGroup like the main thread created in run(),
+	// otherwise Thread.currentThread().getThreadGroup() returns null.
+	auto& tgClass = _classloader->getOrLoad("java.lang.ThreadGroup");
+	auto group = Object::make(tgClass);
+	group->setField("name", Object::make(*_classloader, "sandvik-call"));
+	thread.getThreadObject()->setField("group", group);
+
+	if (args_.size() > method_.getNbArguments()) {
+		throw VmException("too many arguments for method {}", method_.getName());
+	}
+
+	Frame& frame = thread.newFrame(method_);
+	if (!args_.empty()) {
+		// the arguments of a method live in its last registers
+		const uint32_t first = method_.getNbRegisters() - static_cast<uint32_t>(args_.size());
+		for (uint32_t i = 0; i < args_.size(); ++i) {
+			frame.setObjRegister(first + i, args_[i]);
+		}
+	}
+
+	// push the static initializer on top of the stack so that it runs first
+	auto& clazz = method_.getClass();
+	if (!clazz.isStaticInitialized() && clazz.hasMethod("<clinit>", "()V")) {
+		try {
+			thread.newFrame(clazz.getMethod("<clinit>", "()V"));
+		} catch (const std::exception& e) {
+			logger.debug(e.what());
+		}
+	}
+
+	const std::string name = thread.getName();
+	_isRunning.store(true);
+	thread.run(true);
+	_isRunning.store(false);
+	thread.join();
+
+	ObjectRef result = thread.getReturnObject();
+	deleteThread(name);
+	return result;
 }
 
 void Vm::stop() {

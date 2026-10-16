@@ -36,6 +36,7 @@ namespace sandvik {
 	class SharedLibrary;
 	class NativeInterface;
 	class JThread;
+	class Method;
 	/** @class Vm
 	 *  @brief Dalvik Java Virtual Machine implementation.
 	 *
@@ -120,6 +121,16 @@ namespace sandvik {
 			 * @param name_ Name of the thread
 			 */
 			void deleteThread(const std::string& name_);
+
+			/** Invoke a method on a fresh sandvik thread and return its result.
+			 *  This is the entry point used by embedding hosts (JNI bridge, tests):
+			 *  it prepares the thread/frame, runs the class initializer if needed,
+			 *  executes the method and hands back its return value.
+			 *  @param method_ Method to invoke
+			 *  @param args_ Already materialized arguments (see Object::make helpers)
+			 *  @return Return object of the method, or nullptr when the method is void
+			 */
+			ObjectRef call(Method& method_, const std::vector<ObjectRef>& args_);
 
 			/** Load a shared library
 			 * @param libName_ Name of the library

@@ -418,11 +418,24 @@ if(WIN32)
     list(FILTER SANDVIK_LIB_SOURCES EXCLUDE REGEX "src/zygote\\.cpp$")
 endif()
 
+# JNI headers for the embedding entry points (src/api/sandvik_jni.cpp). That file
+# talks to a host JVM through the real <jni.h>, while sandvik's own JNI dialect
+# stays in src/jni/jni.h and is only reachable as "jni/jni.h".
+find_package(JNI QUIET)
+if(JNI_INCLUDE_DIRS)
+    set(_SANDVIK_JNI_INCLUDE_DIRS ${JNI_INCLUDE_DIRS})
+else()
+    get_filename_component(_sandvik_java_bin_dir "${Java_JAVA_EXECUTABLE}" DIRECTORY)
+    get_filename_component(_sandvik_java_home "${_sandvik_java_bin_dir}" DIRECTORY)
+    set(_SANDVIK_JNI_INCLUDE_DIRS "${_sandvik_java_home}/include" "${_sandvik_java_home}/include/win32")
+endif()
+
 add_library(sandvik SHARED
     ${SANDVIK_LIB_SOURCES}
     "${_DEX_ASM}")
 
 target_include_directories(sandvik PUBLIC src "${CMAKE_BINARY_DIR}")
+target_include_directories(sandvik PRIVATE ${_SANDVIK_JNI_INCLUDE_DIRS})
 
 target_link_libraries(sandvik
     PUBLIC
@@ -435,7 +448,11 @@ target_link_libraries(sandvik
         $<$<BOOL:${WIN32}>:psapi>)
 
 if(WIN32)
-    target_link_options(sandvik PRIVATE -Wl,--allow-multiple-definition)
+    # --export-all-symbols keeps the historical behaviour of the POSIX build:
+    # the library is also consumed by the executables/tests (and by a host JVM
+    # looking for Java_org_sandvik_Native_*), so every global symbol has to be
+    # reachable from the import library.
+    target_link_options(sandvik PRIVATE -Wl,--allow-multiple-definition -Wl,--export-all-symbols)
     if(_STATIC_CXXRT)
         target_link_libraries(sandvik PRIVATE ${_STATIC_CXXRT})
     endif()
@@ -560,4 +577,35 @@ if(SANDVIK_TESTS)
 
         add_test(NAME ${test_name} COMMAND ${test_name})
     endforeach()
+
+    # -----------------------------------------------------------------------
+    # sandvik as a library: host-JVM acceptance test (src/api/sandvik_c.h).
+    # A plain JVM loads libsandvik and asks it to run a method of a dex file,
+    # which is milestone M1 of sandvik/UNIDBG_EVAL.md. The dex under test is
+    # regenerated next to its source, like the other tests/java/*/classes.dex.
+    # -----------------------------------------------------------------------
+    set(_BRIDGE_DEX_DIR "${CMAKE_SOURCE_DIR}/tests/java/bridge")
+    set(_BRIDGE_DEX "${_BRIDGE_DEX_DIR}/classes.dex")
+    set(_BRIDGE_DEX_CLASSES "${CMAKE_BINARY_DIR}/bridge-dex-classes")
+    set(_BRIDGE_CLASSES "${CMAKE_BINARY_DIR}/bridge-classes")
+    add_custom_command(
+        OUTPUT "${_BRIDGE_DEX}" "${_BRIDGE_CLASSES}/org/sandvik/BridgeTest.class"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${_BRIDGE_DEX_CLASSES}" "${_BRIDGE_CLASSES}"
+        COMMAND ${Java_JAVAC_EXECUTABLE} --release 8 -nowarn -d "${_BRIDGE_DEX_CLASSES}"
+                "${_BRIDGE_DEX_DIR}/BridgeHello.java"
+        COMMAND ${Java_JAVA_EXECUTABLE} -cp "${D8_JAR}" com.android.tools.r8.D8 --min-api 26
+                --output "${_BRIDGE_DEX_DIR}" "${_BRIDGE_DEX_CLASSES}/BridgeHello.class"
+        COMMAND ${Java_JAVAC_EXECUTABLE} -nowarn -d "${_BRIDGE_CLASSES}"
+                "${CMAKE_SOURCE_DIR}/tests/bridge/org/sandvik/Native.java"
+                "${CMAKE_SOURCE_DIR}/tests/bridge/org/sandvik/BridgeTest.java"
+        DEPENDS "${_BRIDGE_DEX_DIR}/BridgeHello.java"
+                "${CMAKE_SOURCE_DIR}/tests/bridge/org/sandvik/Native.java"
+                "${CMAKE_SOURCE_DIR}/tests/bridge/org/sandvik/BridgeTest.java"
+                sandvik
+        COMMENT "Compiling the sandvik/host-JVM bridge acceptance test")
+    add_custom_target(bridge_classes ALL DEPENDS "${_BRIDGE_CLASSES}/org/sandvik/BridgeTest.class")
+    add_test(NAME bridge_jvm
+             COMMAND ${Java_JAVA_EXECUTABLE} --enable-native-access=ALL-UNNAMED
+                     "-Dsandvik.library=$<TARGET_FILE:sandvik>"
+                     -cp "${_BRIDGE_CLASSES}" org.sandvik.BridgeTest "${CMAKE_SOURCE_DIR}")
 endif()
