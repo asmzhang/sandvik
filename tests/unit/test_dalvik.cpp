@@ -52,7 +52,10 @@ TEST(VM, HelloWorld) {
 								std::istreambuf_iterator<char>());
 	refFile.close();
 	ASSERT_EQ(actualOutput, expectedOutput) << "The actual output does not match the expected output.";
-	fclose(file);
+	// Keep the process stdout open: fclose() on it closes fd 1, and every test
+	// that runs after this one then fails with
+	//   "cannot write to file: Bad file descriptor"
+	fflush(file);
 }
 
 TEST(VM, Fibonacci) {
@@ -77,7 +80,10 @@ TEST(VM, Fibonacci) {
 							   std::istreambuf_iterator<char>());
 	refFile.close();
 	ASSERT_EQ(actualOutput, expectedOutput) << "The actual output does not match the expected output.";
-	fclose(file);
+	// Keep the process stdout open: fclose() on it closes fd 1, and every test
+	// that runs after this one then fails with
+	//   "cannot write to file: Bad file descriptor"
+	fflush(file);
 }
 
 TEST(VM, Dalvik) {
@@ -102,7 +108,10 @@ TEST(VM, Dalvik) {
 							   std::istreambuf_iterator<char>());
 	refFile.close();
 	ASSERT_EQ(actualOutput, expectedOutput) << "The actual output does not match the expected output.";
-	fclose(file);
+	// Keep the process stdout open: fclose() on it closes fd 1, and every test
+	// that runs after this one then fails with
+	//   "cannot write to file: Bad file descriptor"
+	fflush(file);
 }
 
 TEST(VM, Native) {
@@ -128,5 +137,8 @@ TEST(VM, Native) {
 							   std::istreambuf_iterator<char>());
 	refFile.close();
 	ASSERT_EQ(actualOutput, expectedOutput) << "The actual output does not match the expected output.";
-	fclose(file);
+	// Keep the process stdout open: fclose() on it closes fd 1, and every test
+	// that runs after this one then fails with
+	//   "cannot write to file: Bad file descriptor"
+	fflush(file);
 }

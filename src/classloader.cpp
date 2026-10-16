@@ -47,6 +47,12 @@ ClassLoader::ClassLoader() = default;
 ClassLoader::~ClassLoader() = default;
 
 void ClassLoader::loadRtByDir(const std::string& rt_) {
+	if (rt_.empty()) {
+		// Vm::loadRtByDir() defaults to an empty path; iterating it would only
+		// raise "No such file or directory [""]" inside rtld::load().
+		logger.fwarning("loadRtByDir: empty runtime directory, nothing to load");
+		return;
+	}
 	try {
 		rtld::load(rt_, _dexs, &_jars);
 		logger.fdebug("RT loaded: {}", rt_);
@@ -57,6 +63,11 @@ void ClassLoader::loadRtByDir(const std::string& rt_) {
 }
 
 void ClassLoader::loadRtByFile(const std::string& rt_) {
+	if (rt_.empty()) {
+		// Same default-path case as loadRtByDir() above.
+		logger.fwarning("loadRtByFile: empty runtime file, nothing to load");
+		return;
+	}
 	try {
 		rtld::loadJar(rt_, _dexs);
 		_jars.push_back(rt_);

@@ -29,6 +29,20 @@
 #include <sys/stat.h>
 #include <sys/utsname.h>
 
+/*
+ * mingw-w64's struct stat has no st_blksize/st_blocks, but Android's
+ * StructStat.java constructor takes both. Report the Android defaults: a
+ * 4096-byte block size and 512-byte block counts derived from the size the
+ * host already reports, so callers that size buffers from these stay sane.
+ */
+#if defined(_WIN32)
+#define SANDVIK_ST_BLKSIZE(st) ((st).st_size == 0 ? 0 : 4096)
+#define SANDVIK_ST_BLOCKS(st) (((st).st_size + 511) / 512)
+#else
+#define SANDVIK_ST_BLKSIZE(st) ((st).st_blksize)
+#define SANDVIK_ST_BLOCKS(st) ((st).st_blocks)
+#endif
+
 #include "array.hpp"
 #include "class.hpp"
 #include "classloader.hpp"
@@ -228,7 +242,7 @@ extern "C" {
 		return env->NewObject(structStatClass, ctor, static_cast<jlong>(st.st_dev), static_cast<jlong>(st.st_ino), static_cast<jint>(st.st_mode),
 		                      static_cast<jlong>(st.st_nlink), static_cast<jint>(st.st_uid), static_cast<jint>(st.st_gid), static_cast<jlong>(st.st_rdev),
 		                      static_cast<jlong>(st.st_size), static_cast<jlong>(st.st_atime), static_cast<jlong>(st.st_mtime), static_cast<jlong>(st.st_ctime),
-		                      static_cast<jlong>(st.st_blksize), static_cast<jlong>(st.st_blocks));
+		                      SANDVIK_ST_BLKSIZE(st), SANDVIK_ST_BLOCKS(st));
 	}
 
 	JNIEXPORT jobject JNICALL Java_libcore_io_Linux_stat(JNIEnv* env, jclass clazz, jstring path) {
@@ -246,7 +260,7 @@ extern "C" {
 		return env->NewObject(structStatClass, ctor, static_cast<jlong>(st.st_dev), static_cast<jlong>(st.st_ino), static_cast<jint>(st.st_mode),
 		                      static_cast<jlong>(st.st_nlink), static_cast<jint>(st.st_uid), static_cast<jint>(st.st_gid), static_cast<jlong>(st.st_rdev),
 		                      static_cast<jlong>(st.st_size), static_cast<jlong>(st.st_atime), static_cast<jlong>(st.st_mtime), static_cast<jlong>(st.st_ctime),
-		                      static_cast<jlong>(st.st_blksize), static_cast<jlong>(st.st_blocks));
+		                      SANDVIK_ST_BLKSIZE(st), SANDVIK_ST_BLOCKS(st));
 	}
 
 	JNIEXPORT jboolean JNICALL Java_libcore_io_Linux_access(JNIEnv* env, jobject thiz, jstring path, jint mode) {

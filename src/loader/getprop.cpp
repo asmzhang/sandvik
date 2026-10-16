@@ -27,6 +27,13 @@
 
 using namespace sandvik;
 
+// Keep the instance inside the library (see Logger::getInstance) so that the
+// properties loaded by the executable are the ones the VM reads.
+GetProp& GetProp::getInstance() {
+	static GetProp instance;
+	return instance;
+}
+
 std::string GetProp::trim(const std::string& value_) {
 	size_t first = 0;
 	while (first < value_.size() && std::isspace(static_cast<unsigned char>(value_[first])) != 0) {

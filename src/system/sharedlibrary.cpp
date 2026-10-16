@@ -41,10 +41,20 @@ std::string SharedLibrary::getFullPath(const std::string& name_) {
 		return "";
 	}
 	std::string ldLibraryPath = system::env::get("LD_LIBRARY_PATH");
+#ifdef _WIN32
+	// Windows has no LD_LIBRARY_PATH: PATH is the equivalent, and its entries
+	// are separated by ';' instead of ':'.
+	if (ldLibraryPath.empty()) {
+		ldLibraryPath = system::env::get("PATH");
+	}
+	constexpr char pathSeparator = ';';
+#else
+	constexpr char pathSeparator = ':';
+#endif
 	std::istringstream pathStream(ldLibraryPath);
 	std::string path;
 
-	while (std::getline(pathStream, path, ':')) {
+	while (std::getline(pathStream, path, pathSeparator)) {
 		std::filesystem::path p(path);
 		p /= name_;
 		if (std::filesystem::exists(p)) {

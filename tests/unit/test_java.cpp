@@ -53,7 +53,10 @@ void run_common_test(const std::string& mainclassname) {
 
 	ASSERT_EQ(actualOutput, "ok\n") << "The actual output does not match the expected output.";
 
-	fclose(file);
+	// Keep the process stdout open: fclose() on it closes fd 1, and every test
+	// that runs after this one then fails with
+	//   "cannot write to file: Bad file descriptor"
+	fflush(file);
 }
 
 TEST(JVM, DefaultMethods) {

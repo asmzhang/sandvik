@@ -38,6 +38,12 @@ namespace sandvik {
 			friend class Singleton<GetProp>;
 
 		public:
+			/** Single DLL-local instance - hides Singleton<GetProp>::getInstance()
+			 *  so that the static variable lives in libsandvik and is shared
+			 *  across DLL boundaries on Windows: the property file loaded by the
+			 *  executable must be visible to the natives running in the library. */
+			static GetProp& getInstance();
+
 			/**
 			 * @brief Parse and load properties from raw getprop text output.
 			 * @param output_ Full text returned by an android getprop command.

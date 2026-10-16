@@ -29,6 +29,20 @@
 #include "object.hpp"
 #include "system/logger.hpp"
 
+#ifdef _WIN32
+/*
+ * mingw-w64 needs help with two POSIX call sites below that Linux resolves
+ * through transitively-included headers:
+ *   - gettimeofday() lives in <sys/time.h> (not pulled in here on Windows),
+ *   - getcwd() lives in <direct.h> as _getcwd().
+ */
+#include <direct.h>
+#include <sys/time.h>
+#ifndef getcwd
+#define getcwd(buf, size) _getcwd((buf), static_cast<int>(size))
+#endif
+#endif /* _WIN32 */
+
 /** @todo implementation **/
 
 extern "C" {
@@ -166,7 +180,14 @@ JNIEXPORT void JNICALL Java_java_lang_System_arraycopyBooleanUnchecked(JNIEnv* e
 
 	JNIEXPORT jstring JNICALL Java_java_lang_System_mapLibraryName(JNIEnv* env, jclass, jstring libname) {
 		auto nameObj = sandvik::native::getString(libname);
+#ifdef _WIN32
+		// Windows: the CMake targets are named lib<name>.dll (see the test JNI
+		// libraries in CMakeLists.txt), so keep the prefix but use the PE
+		// extension — "lib<name>.so" can never be loaded by LoadLibrary().
+		std::string mapped = "lib" + nameObj->str() + ".dll";
+#else
 		std::string mapped = "lib" + nameObj->str() + ".so";
+#endif
 		return env->NewStringUTF(mapped.c_str());
 	}
 

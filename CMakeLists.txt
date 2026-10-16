@@ -160,6 +160,10 @@ set(_EP_CMAKE_ARGS
     -DCMAKE_RANLIB=${CMAKE_RANLIB}
     -DCMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}
     -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR}
+    # CMake >= 4 rejects cmake_minimum_required(VERSION <3.5) outright;
+    # ext/axml-parser still declares 3.0, so relax the policy floor for
+    # every external project.
+    -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 )
 
 # ---------------------------------------------------------------------------
@@ -389,12 +393,30 @@ add_custom_command(
 # ---------------------------------------------------------------------------
 # sandvik shared library
 # ---------------------------------------------------------------------------
-file(GLOB_RECURSE SANDVIK_LIB_SOURCES
+# CONFIGURE_DEPENDS so that adding a source file re-runs the glob instead of
+# silently leaving it out of the build.
+file(GLOB_RECURSE SANDVIK_LIB_SOURCES CONFIGURE_DEPENDS
     "src/*.cpp"
     "src/*.c"
     "android/*/natives/*.cpp"
     "android/*/natives/*.c")
 list(FILTER SANDVIK_LIB_SOURCES EXCLUDE REGEX "src/main\\.cpp$")
+
+if(WIN32)
+    # POSIX-only native: mingw-w64 has no <sys/eventfd.h>, and the zygote
+    # bootstrap it implements has no faithful Windows equivalent. Upstream
+    # compiles it on Linux only.
+    # libcore.io.Linux used to be excluded here as well; it is now built on
+    # Windows through the shims in src/compat (pwd.h, sys/utsname.h,
+    # sys/mman.h, sys/poll.h, sys/socket.h, sys/types.h) plus
+    # src/compat/posix_win32.cpp.
+    list(FILTER SANDVIK_LIB_SOURCES EXCLUDE REGEX
+        "android/[^/]+/natives/com/android/internal/os/Zygote\\.cpp$")
+    # src/zygote.cpp speaks AF_UNIX sockets (<sys/socket.h>/<sys/un.h>) for the
+    # Android zygote bootstrap, which has no faithful mingw-w64 equivalent;
+    # src/main.cpp guards its include and call the same way.
+    list(FILTER SANDVIK_LIB_SOURCES EXCLUDE REGEX "src/zygote\\.cpp$")
+endif()
 
 add_library(sandvik SHARED
     ${SANDVIK_LIB_SOURCES}
@@ -471,9 +493,19 @@ install(TARGETS sandvik_exe
 if(SANDVIK_TESTS)
     enable_testing()
 
+    # JNI headers, needed by the two test JNI libraries below.
+    find_package(JNI QUIET)
+    if(JNI_INCLUDE_DIRS)
+        set(_TEST_JNI_INCLUDE_DIRS ${JNI_INCLUDE_DIRS})
+    else()
+        # Fallback: locate jni.h from the Java executable path
+        get_filename_component(_java_bin_dir "${Java_JAVA_EXECUTABLE}" DIRECTORY)
+        get_filename_component(_java_home "${_java_bin_dir}" DIRECTORY)
+        set(_TEST_JNI_INCLUDE_DIRS "${_java_home}/include" "${_java_home}/include/win32")
+    endif()
+
     # Build libnative (JNI test library) for VM.Native test
     if(WIN32)
-        find_package(JNI QUIET)
         add_library(native SHARED "tests/java/native/native.c")
         set_target_properties(native PROPERTIES
             OUTPUT_NAME "libnative"
@@ -481,16 +513,24 @@ if(SANDVIK_TESTS)
             SUFFIX ".dll"
             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
         target_compile_options(native PRIVATE -Wno-format)
-        if(JNI_INCLUDE_DIRS)
-            target_include_directories(native PRIVATE ${JNI_INCLUDE_DIRS})
-        else()
-            # Fallback: locate jni.h from the Java executable path
-            get_filename_component(_java_bin_dir "${Java_JAVA_EXECUTABLE}" DIRECTORY)
-            get_filename_component(_java_home "${_java_bin_dir}" DIRECTORY)
-            target_include_directories(native PRIVATE
-                "${_java_home}/include"
-                "${_java_home}/include/win32")
-        endif()
+        target_include_directories(native PRIVATE ${_TEST_JNI_INCLUDE_DIRS})
+
+        # Build libtestjni for the JNITestFixture tests. POSIX loads the prebuilt
+        # tests/java/jni/libtestjni.so, Windows has no such binary and needs a
+        # real DLL next to the test executables.
+        file(GLOB TESTJNI_SOURCES "tests/java/jni/src/*.c")
+        add_library(testjni SHARED ${TESTJNI_SOURCES})
+        set_target_properties(testjni PROPERTIES
+            OUTPUT_NAME "libtestjni"
+            PREFIX ""
+            SUFFIX ".dll"
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+        target_compile_options(testjni PRIVATE -Wno-format)
+        target_include_directories(testjni PRIVATE
+            ${_TEST_JNI_INCLUDE_DIRS}
+            "tests/java/jni/includes")
+        # test_threads.c uses pthread_create/pthread_join.
+        target_link_libraries(testjni PRIVATE Threads::Threads)
     endif()
 
     file(GLOB_RECURSE UNIT_TEST_SOURCES "tests/unit/test_*.cpp")

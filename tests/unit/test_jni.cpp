@@ -26,8 +26,10 @@ protected:
 
         vm.run(className, {});
 
+        // Keep the process stdout open: fclose() on it closes fd 1, and every
+        // test that runs after this one then fails with
+        //   "cannot write to file: Bad file descriptor"
         fflush(stdout);
-        fclose(file);
 
         // Verify Output
         std::ifstream outputFile(outFile);

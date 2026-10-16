@@ -40,6 +40,11 @@ namespace sandvik {
 	 */
 	class Trace : public Singleton<Trace> {
 		public:
+			/** Single DLL-local instance - hides Singleton<Trace>::getInstance()
+			 *  so that the static variable lives in libsandvik and is shared
+			 *  across DLL boundaries on Windows. */
+			static Trace& getInstance();
+
 			/** Enable/disable traces
 			 * @param enable_ enable/disable
 			 */

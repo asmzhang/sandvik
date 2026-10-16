@@ -32,6 +32,14 @@
 #include "object.hpp"
 #include "system/logger.hpp"
 
+#ifdef _WIN32
+/* mingw's <sys/stat.h> has no S_ISSOCK(); Windows has no socket files, so
+ * FileDescriptor.isSocket() must report false. */
+#ifndef S_ISSOCK
+#define S_ISSOCK(mode) 0
+#endif
+#endif
+
 /** @todo implementation **/
 
 extern "C" {

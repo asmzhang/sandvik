@@ -34,7 +34,13 @@
 
 using namespace sandvik;
 
-// getInstance() is provided by Singleton<Trace> (src/system/singleton.hpp)
+// Same rationale as Logger::getInstance(): keep the instance inside the library
+// so the trace flags set by the executable reach the VM running in the DLL.
+Trace& Trace::getInstance() {
+	static Trace instance;
+	return instance;
+}
+
 namespace {
 	std::vector<std::string> parseParameterDescriptors(const std::string& signature) {
 		std::vector<std::string> params;

@@ -28,7 +28,16 @@
 
 using namespace sandvik;
 
-// getInstance() is provided by Singleton<Logger> (src/system/singleton.hpp)
+// The logger instance lives here (inside the library) rather than in the inline
+// Singleton<Logger>::getInstance(). On Windows an executable linking the shared
+// libsandvik.dll would otherwise instantiate a second logger, so calling
+// logger.setLevel() from main() or from the tests had no effect on the messages
+// logged by the VM itself.
+Logger &Logger::getInstance() {
+	static Logger instance;
+	return instance;
+}
+
 Logger::Logger() = default;
 
 Logger::~Logger() {

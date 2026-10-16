@@ -40,6 +40,11 @@ namespace sandvik {
 			/** enum for log level */
 			enum class LogLevel { DEBUG = 0, INFO, WARNING, OK, ERROR, NONE, ALWAYS = 0x10 };
 
+			/** Single DLL-local instance - hides Singleton<Logger>::getInstance()
+			 *  so that the static variable lives in libsandvik and is shared
+			 *  across DLL boundaries on Windows. */
+			static Logger &getInstance();
+
 			/** add thread to logger : log messages from this thread will be prefixed with thread name
 			 * @param tid_ thread id
 			 * @param name_ thread name
