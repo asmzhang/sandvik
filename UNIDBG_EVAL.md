@@ -467,3 +467,50 @@ vm.setJni(new SandvikJni(bridge));   // Java 调用 -> sandvik 执行
 - **性能**：每次 Java 调用都是「unidbg 解释 native 帧 → JNI → sandvik 解释 Java」，两边都是解释器；这条链适合正确性验证与少量回调，不适合当高频热路径。
 - **两个真坑**：① 用 `& java ... 2>&1 | Where-Object` 时若 `$ErrorActionPreference = 'Stop'`，java 的 stderr 会被 PowerShell 包成终止性 `NativeCommandError`（脚本假失败）；`run_eval.ps1` 在调用前后临时放宽为 `Continue`。② 用 `&` 调用 `.ps1` 时它内部的 `exit` 会结束调用方 pwsh。
 
+---
+
+## 15 代码已落地：`arsenal/attack/tools/sandvik-bridge`（实测）
+
+§11 说「新项目做中间层、JVM 当宿主」——这一节记录它现在**住在哪、怎么跑、怎么算绿**，而不是又一个设想。
+
+### 15.1 形态
+
+| 组成 | 位置（伞仓 `D:\work\vmp\arsenal`） | pin |
+| --- | --- | --- |
+| sandvik 引擎 | `attack/tools/sandvik-bridge/third_party/sandvik` | submodule，分支 `my2`（M1/M2/M3 三笔都在远端） |
+| unidbg 引擎 | `attack/tools/sandvik-bridge/third_party/unidbg` | submodule，分支 `arsenal-jdk-modules`（补两个显式 `import com.github.unidbg.Module;`，JDK 9+ 模块解析需要） |
+| 桥类 | `<tool>/java/com/github/unidbg/linux/android/dvm/{SandvikBridge,SandvikClass,SandvikJni,SandvikObject}.java` | 伞仓内跟踪；**必须与 `BaseVM` 同包**（构造器包私有） |
+| 验收程序 | `<tool>/java/org/sandvik/{SandvikBridgeTest,SandvikNativeTest}.java` | M2 / M3 的断言程序 |
+| 原生侧 | `<tool>/native/sandvik_bridge.c` | M3 的 arm64 库，用 NDK 现场编 |
+| 入口 | `python -m sandvik_bridge {info,plan,verify,unidbg,sandvik}` | 两个引擎都构建到 `<tool>/build/`，**不写进 checkout** |
+
+两个引擎各自保留 history 与 origin（sandvik = asmzhang 的 fork，GPL-3.0；unidbg = Apache-2.0）⇒ 合并分发整体 GPL-3.0（§11.5 的落地版）。
+
+### 15.2 怎么跑（在伞仓根）
+
+```
+cd D:\work\vmp\arsenal
+python -m arsenal attack sandvik-bridge info
+python -m arsenal attack sandvik-bridge plan --which both
+python -m arsenal attack sandvik-bridge verify --which both --ndk <NDK 目录> --report build\verify.json
+```
+
+`verify` 依次跑 `bridge:javac` → `native:ndk` → `accept:m2` → `accept:m3`；**绿 = 末两条的 marker**（`[ok] M2 bridge acceptance passed` / `[ok] M3 native bridge acceptance passed`），不是「exit 0 就算过」。
+
+### 15.3 实测结果
+
+- 两个引擎现场构建：`sandvik:configure` 1.84 s、`sandvik:build` 50.74 s、`unidbg:build` 22.08 s、`unidbg:classpath` 2.2 s。
+- `verify --which both` 绿：`bridge:javac` rc=0、`native:ndk` rc=0、`accept:m2` rc=0（`SandvikBridgeTest` 21 项断言）、`accept:m3` rc=0（native 回调 Java 三条全过）；报告里带 `java_version`、两个引擎的 revision 与分支。
+- 工具自带单测 **67 个全过**；伞仓根套件 `python -m pytest tests -q` **191 passed + 111 subtests**。
+
+### 15.4 落地期间撞到的三个平台坑（写进代码注释）
+
+1. **NDK clang 的无扩展名脚本**：`aarch64-linux-android21-clang` 是 POSIX 脚本，Windows 直接 `CreateProcess` 报 `WinError 193` ⇒ `Layout.ndk_clang()` 在 Windows 优先选 `.cmd`/`.exe`；`flow.run_step` 增加 `OSError → rc=126`（不再抛栈）。
+2. **maven-gpg 插件**：`mvnw install` 在无 gpg 的机器上失败（`Could not determine gpg version`）⇒ 构建加 `-Dgpg.skip=true`；且必须 `install`（不是 `package`），否则 `unidbg-android` 解析不到 `unidbg-api` 的快照。
+3. **sandvik 的嵌套 submodule**：`third_party/sandvik` 自己还挂着 `ext/{args,axml-parser,fmt,googletest,libffi,xxHash}`，浅克隆取不到任意 SHA ⇒ 去掉 `--depth 1` 递归 update（工具为此有独立的 `sandvik:submodules` 步骤）。
+
+### 15.5 边界（别把它当脱壳器）
+
+§10 的结论没变：这条链是**native 侧动态取证 + dex 行为验证**，不是脱壳路线。壳把明文写回运行时 dex 结构（真机上是 ART 的 CodeItem），unidbg/sandvik 都没有那个落点；本项目也不需要（store 已明文、encKey 已静态拿到）。同样地，`hook.min` 才是去保护终点，这里不声称任何「已脱壳」。
+
+
