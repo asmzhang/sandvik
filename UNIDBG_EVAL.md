@@ -2,8 +2,8 @@
 
 本文评估的是**把 sandvik 与 unidbg 集成起来**这件事：两边的能力边界、接缝在哪、集成要先补什么、有哪几条路线、值不值得做。
 
-- sandvik：`D:\work\Apps\com.hylztn.helper\sandvik`（C++ 最小 Dalvik VM，GPL-3.0，分支 `my2` @ `6b2d4f5`）
-- unidbg：`D:\work\Apps\com.hylztn.helper\unidbg`（Java + Unicorn 的 ARM/ARM64 仿真器，Apache-2.0，`v0.9.9-48-g2ba8156e` = `2ba8156e`）
+- sandvik：`D:\work\vmp\arsenal\Apps\com.hylztn.helper\sandvik`（C++ 最小 Dalvik VM，GPL-3.0，分支 `my2` @ `6b2d4f5`）
+- unidbg：`D:\work\vmp\arsenal\Apps\com.hylztn.helper\unidbg`（Java + Unicorn 的 ARM/ARM64 仿真器，Apache-2.0，`v0.9.9-48-g2ba8156e` = `2ba8156e`）
 
 > 前一版（235 行）写于 upstream `main` 合并之前。其中 **「sandvik JNI 大面积未实现」「JavaVM 传的是 nullptr」** 等条目已被本次实测推翻，第 6 节给出更正表；第 7 节是本机实测证据。
 
@@ -123,7 +123,7 @@ Java 代码 │ dex 解释器 / 类加载 / GC / 线程          │        │ 
 ### 7.1 unidbg 构建（Windows / JDK 17 或 25）
 
 ```
-cd D:\work\Apps\com.hylztn.helper\unidbg
+cd D:\work\vmp\arsenal\Apps\com.hylztn.helper\unidbg
 .\mvnw.cmd -B -DskipTests -pl unidbg-android -am package
 → BUILD SUCCESS (20 s)
    unidbg-api\target\unidbg-api-0.9.10-SNAPSHOT.jar        432,569 B
@@ -140,7 +140,7 @@ cd D:\work\Apps\com.hylztn.helper\unidbg
 | 目标 | 结果 |
 | --- | --- |
 | unidbg 自带测试库 `libjnidispatch.so`（arm64-v8a） | base=`0x12000000` size=`0x30000`，加载 1.5 s；`callJNI_OnLoad` = true，随后 `JNI_OnLoad` 抛 `java.lang.IllegalStateException: Illegal JNI version: 0xffffffff` |
-| 本项目壳库 `D:\work\Apps\com.hylztn.helper\unpack\shell_lib91d2fe.so`（arm64，615,904 B） | base=`0x12000000` size=`0xa4000`；`callJNI_OnLoad` = true，但 **`JNI_OnLoad` 在 90 s 内没有返回**（看门狗 `Runtime.halt(3)`）；期间它加载了 libc++/libc 与一个解密出来的 `lib3fa5e15702635193.so` 并跑了 init array |
+| 本项目壳库 `D:\work\vmp\arsenal\Apps\com.hylztn.helper\unpack\shell_lib91d2fe.so`（arm64，615,904 B） | base=`0x12000000` size=`0xa4000`；`callJNI_OnLoad` = true，但 **`JNI_OnLoad` 在 90 s 内没有返回**（看门狗 `Runtime.halt(3)`）；期间它加载了 libc++/libc 与一个解密出来的 `lib3fa5e15702635193.so` 并跑了 init array |
 
 **读法**：unidbg 能把它"搬进模拟器并跑起来"，但它的 JNI 门面不足以支撑一个真实库的 `JNI_OnLoad`——这既是**集成必要性的最强证据**，也标出了集成最硬的那一块（env 语义）。
 
